@@ -14,6 +14,7 @@ from __future__ import annotations
 __all__ = [
     "ChannelResolutionError",
     "ChromamcpError",
+    "CriteriaError",
     "InaccessiblePathError",
     "MalformedFileError",
     "MetricInputError",
@@ -48,3 +49,7 @@ class PeakGeometryError(ChromamcpError):
 
 class ChannelResolutionError(ChromamcpError):
     """Raised when a requested chromatogram channel cannot be resolved unambiguously."""
+
+
+class CriteriaError(ChromamcpError):
+    """Raised when a criteria file cannot be parsed or violates the §6 contract."""

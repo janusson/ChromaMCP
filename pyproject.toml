@@ -10,12 +10,19 @@ requires-python = ">=3.13"
 # Deliberately bounded (SCHEDULE.md W0.1, AGENTS.md §5): the mzML reader stack,
 # numpy and a serialiser — and nothing else without a recorded reason.
 #
-# W1 (2026-10-11) records exactly one runtime dependency.  The mzML reader is
-# standard-library only (ElementTree + base64 + zlib), as in the sibling MSMCP,
-# so `numpy` is the sole addition; it is BSD-3-licensed and MIT-compatible
-# (AGENTS.md §6).  numpy>=2.1 is the first release with Python 3.13 wheels.
+# W1 (2026-10-11) added `numpy`: the mzML reader is standard-library only
+# (ElementTree + base64 + zlib, as in the sibling MSMCP), so numpy was the sole
+# addition; BSD-3-licensed and MIT-compatible (AGENTS.md §6).  numpy>=2.1 is the
+# first release with Python 3.13 wheels.
+#
+# W6 (2026-10-11) adds `pyyaml`: M1-BRIEF.md §6 shows the criteria file in YAML
+# syntax, so a YAML reader is required.  PyYAML is MIT-licensed and
+# MIT-compatible (AGENTS.md §6) and is used only through `yaml.safe_load`, which
+# constructs no arbitrary objects.  (Recorded alternative: TOML via the stdlib
+# `tomllib` would avoid this dependency but change the brief's shown format.)
 dependencies = [
     "numpy>=2.1",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +34,9 @@ dev = [
     "ruff>=0.11",
     "mypy>=1.15",
     "basedpyright>=1.16",
+    # Type stubs for the W6 YAML reader (pyyaml ships no inline types). Dev-only,
+    # so it is not a runtime dependency and does not affect the §5 bound.
+    "types-pyyaml>=6.0",
 ]
 
 [build-system]

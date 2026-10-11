@@ -24,13 +24,16 @@ def test_package_is_typed() -> None:
 
 
 def test_runtime_dependencies_are_bounded() -> None:
-    """Only the W1 mzML reader stack (numpy) may be a runtime dependency.
+    """Only the recorded runtime dependencies are allowed.
 
     ``AGENTS.md`` §5: the scaffold ships zero runtime dependencies and every
-    addition is recorded at the point of addition.  W1 records exactly one —
-    ``numpy`` — because the mzML reader itself is standard-library only.
+    addition is recorded at the point of addition.  W1 records ``numpy`` (the
+    mzML reader is standard-library only); W6 records ``pyyaml`` (the criteria
+    file is YAML per ``M1-BRIEF.md`` §6).
     """
     requires = metadata.requires("chromamcp") or []
     runtime = [r for r in requires if "extra ==" not in r]
     names = {re.split(r"[<>=!~;\[\s]", r, maxsplit=1)[0].lower() for r in runtime}
-    assert names == {"numpy"}, f"unexpected runtime dependencies: {sorted(names)}"
+    assert names == {"numpy", "pyyaml"}, (
+        f"unexpected runtime dependencies: {sorted(names)}"
+    )
