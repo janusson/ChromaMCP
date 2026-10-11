@@ -7,6 +7,7 @@ this a PEP 561 typed package, so a type checker sees real signatures instead of 
 
 from __future__ import annotations
 
+import re
 from importlib import metadata
 from pathlib import Path
 
@@ -22,8 +23,14 @@ def test_package_is_typed() -> None:
     assert (package_dir / "py.typed").is_file()
 
 
-def test_no_runtime_dependencies_yet() -> None:
-    """The scaffold ships no runtime dependency; W1 adds them one recorded at a time."""
+def test_runtime_dependencies_are_bounded() -> None:
+    """Only the W1 mzML reader stack (numpy) may be a runtime dependency.
+
+    ``AGENTS.md`` §5: the scaffold ships zero runtime dependencies and every
+    addition is recorded at the point of addition.  W1 records exactly one —
+    ``numpy`` — because the mzML reader itself is standard-library only.
+    """
     requires = metadata.requires("chromamcp") or []
     runtime = [r for r in requires if "extra ==" not in r]
-    assert runtime == []
+    names = {re.split(r"[<>=!~;\[\s]", r, maxsplit=1)[0].lower() for r in runtime}
+    assert names == {"numpy"}, f"unexpected runtime dependencies: {sorted(names)}"

@@ -7,10 +7,16 @@ description = "MCP server for chromatographic data: system-suitability metrics w
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.13"
-# Deliberately bounded by SCHEDULE.md W0.1: W1 adds the mzML reader, numpy and a
-# serialiser — and nothing else without a recorded reason.  An unused dependency is
-# not free, so the scaffold ships none.
-dependencies = []
+# Deliberately bounded (SCHEDULE.md W0.1, AGENTS.md §5): the mzML reader stack,
+# numpy and a serialiser — and nothing else without a recorded reason.
+#
+# W1 (2026-10-11) records exactly one runtime dependency.  The mzML reader is
+# standard-library only (ElementTree + base64 + zlib), as in the sibling MSMCP,
+# so `numpy` is the sole addition; it is BSD-3-licensed and MIT-compatible
+# (AGENTS.md §6).  numpy>=2.1 is the first release with Python 3.13 wheels.
+dependencies = [
+    "numpy>=2.1",
+]
 
 [project.optional-dependencies]
 test = [
