@@ -16,6 +16,7 @@ __all__ = [
     "ChromamcpError",
     "InaccessiblePathError",
     "MalformedFileError",
+    "PeakGeometryError",
     "UnsupportedFormatError",
 ]
 
@@ -34,6 +35,10 @@ class UnsupportedFormatError(ChromamcpError):
 
 class MalformedFileError(ChromamcpError):
     """Raised when a file is opened but does not parse as valid mzML."""
+
+
+class PeakGeometryError(ChromamcpError):
+    """Raised when peak geometry is undefined: bad trace, or a width not bracketed."""
 
 
 class ChannelResolutionError(ChromamcpError):
