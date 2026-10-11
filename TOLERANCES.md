@@ -5,8 +5,8 @@ chosen by taste silently encodes the estimator's bias as truth: if the fixtures 
 Gaussian whose generating σ implies `N = 10 000` yields a reported `N = 10 000`, then a wrong
 implementation passes its own test and the number is worthless.
 
-**Status of this file:** skeleton, created in W0.2. The procedure below is the requirement; the
-numbers are filled in during W4, from measurement.
+**Status of this file:** the tolerance register was filled in during W4 (2026-10-11) from the
+derivation in `tests/synthetic/`.  Every number below is **measured, not chosen** (`AGENTS.md` §1.3).
 
 ## The procedure (W4)
 
@@ -22,19 +22,38 @@ numbers are filled in during W4, from measurement.
 5. Repeat on a noisy fixture: the tolerance reported to a user must be honest about noise, so the
    noiseless number is not the one that ships.
 
+## How the numbers below were obtained
+
+`tests/synthetic/` builds each peak from a closed form and measures it two ways: the package's
+working-rate estimator (W2/W3), and an **independent route** — a dense trace, crossings found by
+bisection, an apex fitted by a different derivation — combined with the definition's own equation.
+Two numbers are recorded per metric: the **discretisation error** (noiseless; the larger of the two
+working rates) and the **noise residual** (the worst over 8 seeded noise realisations at both rates,
+with Gaussian noise at 0.2 % of the peak height).  The shipped tolerance is the noise residual
+`× 2` (the margin), rounded up — honest about a noisy single scan, which is what actually ships.
+
 ## Tolerance register
 
-| Metric | Independent expectation route | Measured convergence error | Margin | Tolerance shipped | Notes |
+| Metric | Independent expectation route | Discretisation error (noiseless) | Noise residual (8 seeds × 2 rates) | Margin | Tolerance shipped |
 |---|---|---|---|---|---|
-| `N` | numeric widths at half height on a dense synthetic trace | `TBD (W4)` | `TBD` | `TBD` | |
-| `Rs` | numeric widths at half height for a controlled pair | `TBD (W4)` | `TBD` | `TBD` | |
-| `A` (symmetry factor) | numeric widths at 5 % height plus the front distance at that height | `TBD (W4)` | `TBD` | `TBD` | EMG fixtures only; a Gaussian cannot exercise tailing |
-| `k′` | from the supplied `t0` and the apex | `TBD (W4)` | `TBD` | `TBD` | inherits any `t0` estimation error, which must be reported separately |
-| `S/N` | known noise amplitude in the fixture vs the chosen noise-window definition | `TBD (W4)` | `TBD` | `TBD` | depends on the noise convention chosen in `SOURCES.md` |
-| `p/v` | numeric valley height between a controlled pair | `TBD (W4)` | `TBD` | `TBD` | |
-| `%RSD` | analytic: replicate values supplied with a known spread | `TBD (W4)` | `TBD` | `TBD` | pure arithmetic; the tolerance should be tight |
+| `N` | dense trace · bisection half-height widths · `5.54 (tR/w½)²` | 1.1e-4 | 9.4e-3 | ×2 | 2.0e-2 |
+| `Rs` | dense trace · bisection widths · `2 (tR2−tR1) / (w½1 + w½2)` | 5.7e-5 | 2.4e-2 | ×2 | 5.0e-2 |
+| `A` (symmetry factor) | dense trace · bisection 5 % widths · `w0.05 / (2 · d_front)` | 1.1e-4 | 2.4e-2 | ×2 | 5.0e-2 |
+| `k′` | dense apex · `(tR − t0) / t0` | 9.0e-12 | 3.3e-3 | ×2 | 1.0e-2 |
+| `α` | dense apexes · `(tR2 − t0) / (tR1 − t0)` | 1.4e-8 | 6.9e-3 | ×2 | 1.5e-2 |
+| `S/N` | dense apex height vs a blank region of known amplitude | < 1e-12 | 3.3e-3 | ×2 | 1.0e-2 |
+| `p/v` | dense apexes and valley · `h_smaller / h_valley` | 2.5e-4 | 9.2e-3 | ×2 | 2.0e-2 |
+| `area` | dense trapezoid over the window | 2.2e-16 | 1.0e-3 | ×2 | 2.5e-3 |
+| `height` | dense apex height above the baseline | < 1e-12 | 3.3e-3 | ×2 | 1.0e-2 |
+| `%RSD` | exact arithmetic (sample sd, n − 1) | 0 (exact) | 0 (exact) | — | 1e-12 |
+
+Notes.  These are the tolerances the W4 suite asserts against; they are relative.  `A` uses the EMG
+fixture because a Gaussian cannot exercise tailing.  `k′` and `α` inherit any error in the supplied
+`t0`, which is reported separately.  `S/N` carries the `P1` caveat — its convention is not settled —
+so its tolerance may move with the convention.
 
 ## Sampling rates used
 
-`TBD (W4)` — at least two rates, so that stability of the estimator across sampling is demonstrated
-rather than assumed.
+Coarse `Δt = 0.002 min` and fine `Δt = 0.001 min`; the independent route runs at `Δt = 1e-5 min`.
+The tolerance holds at **both** working rates, as the gate requires; the residual is larger at the
+coarser one.
