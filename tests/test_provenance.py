@@ -23,19 +23,8 @@ from chromamcp.provenance import (
     file_sha256,
     serialise,
 )
+from tests.guards import BANNED_WORDS
 
-# The banned words are assembled from fragments so they do not appear as
-# literals in the tree — the W7 vocabulary check greps the tree for them, and
-# this is the one test that has to name them.
-_BANNED = (
-    "valid" + "ated",
-    "confirm" + "ed",
-    "compli" + "ant",
-    "audit" + "-ready",
-    "certif" + "ied",
-    "regulatory" + "-grade",
-    "guarant" + "eed",
-)
 _FIXED_TIME = datetime(2026, 10, 11, 12, 0, 0, tzinfo=UTC)
 
 
@@ -124,7 +113,7 @@ def test_non_finite_floats_stay_valid_json(tmp_path: Path) -> None:
 
 def test_record_uses_only_the_permitted_vocabulary(tmp_path: Path) -> None:
     text = serialise(_sample_record(_input_file(tmp_path))).lower()
-    for word in _BANNED:
+    for word in BANNED_WORDS:
         assert word not in text
 
 
