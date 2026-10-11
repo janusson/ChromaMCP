@@ -16,6 +16,7 @@ __all__ = [
     "ChromamcpError",
     "InaccessiblePathError",
     "MalformedFileError",
+    "MetricInputError",
     "PeakGeometryError",
     "UnsupportedFormatError",
 ]
@@ -35,6 +36,10 @@ class UnsupportedFormatError(ChromamcpError):
 
 class MalformedFileError(ChromamcpError):
     """Raised when a file is opened but does not parse as valid mzML."""
+
+
+class MetricInputError(ChromamcpError):
+    """Raised when a metric's inputs are undefined: negative width, zero t0, etc."""
 
 
 class PeakGeometryError(ChromamcpError):

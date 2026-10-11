@@ -4,9 +4,12 @@ Every formula in `src/chromamcp/metrics/` gets a row here, and a metric whose fo
 absent from this file fails the gate (`tests/test_sources_complete.py`, added in W3). A number
 without its formula's source is not an incomplete feature in this repository; it is a bug.
 
-**Status of this file:** skeleton, created in W0.2. The convention rows at the bottom were
-verified 2026-10-11 from the sources named there; the *equations themselves* are `TO TRANSCRIBE`
-from the primary texts during W3.
+**Status of this file:** the metric register was filled in during W3 (2026-10-11). The USP 〈621〉
+**primary text was not consulted** (it is paywalled), so every equation row ships marked
+`secondary source — primary text not consulted`: the equations below are the standard published
+forms, **not** transcriptions from 〈621〉 itself, and are to be checked against the primary text
+before any of them is presented as "the published formula" (`AGENTS.md` §1.2). The convention rows
+at the bottom were read 2026-10-11 from the sources named there.
 
 ## Rules
 
@@ -21,19 +24,20 @@ from the primary texts during W3.
 
 ## Metric register
 
-| Formula id | Metric | Source to transcribe from | Status |
-|---|---|---|---|
-| — | retention time `tR` | *n/a — a measurement, not a formula* | — |
-| — | width at half height `w½` | *n/a — a measurement; the interpolation rule is ours and must be documented* | — |
-| `plate_number_half_height` | `N` | USP 〈621〉 Chromatography (harmonised text) | `TO TRANSCRIBE` |
-| `resolution_half_height` | `Rs` | USP 〈621〉 | `TO TRANSCRIBE` |
-| `symmetry_factor_5pct` | `A` (symmetry/tailing factor) | USP 〈621〉 | `TO TRANSCRIBE` |
-| `capacity_factor` | `k′` | USP 〈621〉 | `TO TRANSCRIBE` |
-| `selectivity` | `α` | USP 〈621〉 | `TO TRANSCRIBE` |
-| `signal_to_noise` | `S/N` | USP 〈621〉 noise-range definition | `TO TRANSCRIBE` |
-| `peak_to_valley` | `p/v` | USP 〈621〉 | `TO TRANSCRIBE` |
-| `peak_area`, `peak_height` | area, height | *n/a — model-dependent; the baseline rule must cite whatever it follows* | — |
-| `rsd_replicates` | `%RSD` | USP 〈621〉 / standard precision practice | `TO TRANSCRIBE` |
+| Formula id | Metric | Equation as implemented | Source to transcribe from | Status |
+|---|---|---|---|---|
+| — | retention time `tR` | apex time (W2 interpolation) | *n/a — a measurement, not a formula* | — |
+| — | width at half height `w½` | width at ½ of peak height above the baseline (W2) | *n/a — a measurement; the interpolation rule is ours* | — |
+| `plate_number_half_height` | `N` | `N = 5.54 (tR / w½)²` | USP 〈621〉 Chromatography (harmonised text) | `secondary source — primary text not consulted` |
+| `resolution_half_height` | `Rs` | `Rs = 2 (tR2 − tR1) / (w½1 + w½2)` | USP 〈621〉 | `secondary source — primary text not consulted` |
+| `symmetry_factor_5pct` | `A` (symmetry/tailing factor) | `A = w0.05 / (2 · d_front)` | USP 〈621〉 | `secondary source — primary text not consulted` |
+| `capacity_factor` | `k′` | `k′ = (tR − t0) / t0` | USP 〈621〉 | `secondary source — primary text not consulted` |
+| `selectivity` | `α` | `α = k′2 / k′1` | USP 〈621〉 | `secondary source — primary text not consulted` |
+| `signal_to_noise` | `S/N` | `S/N = 2H / h` (h = peak-to-peak blank noise) | USP 〈621〉 noise-range definition | `secondary source — primary text not consulted` |
+| `peak_to_valley` | `p/v` | `p/v = h_smaller / h_valley` (above baseline) | USP 〈621〉 | `secondary source — primary text not consulted` |
+| `peak_area` | area | trapezoid of (intensity − baseline) over the window | *n/a — model-dependent; the baseline rule must cite whatever it follows* | — |
+| `peak_height` | height | `y_apex − baseline(t_apex)` | *n/a — model-dependent* | — |
+| `rsd_replicates` | `%RSD` | `100 · s / x̄` (sample sd, n − 1) | USP 〈621〉 / standard precision practice | `secondary source — primary text not consulted` |
 
 **Anchors for the surrounding vocabulary:** USP 〈1058〉 (analytical instrument qualification) and
 ICH Q2(R2) are named as neighbours in `PLAN.md`; neither is a source for a metric in this panel.
