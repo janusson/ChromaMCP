@@ -1,0 +1,62 @@
+# Repomix ignore — keep AI code-packs small, and keep data out of them.
+#
+# ChromaMCP ingests mzML only (AGENTS.md §4) and ships no data (AGENTS.md §8), so
+# the data patterns below are guardrails for local working copies, not fixtures:
+# they exist so a stray downloaded or vendor file can never be packed or pasted
+# into an LLM context by accident.
+
+# 1. Chromatographic / mass-spectrometry data
+*.mzML
+*.mzXML
+*.raw
+*.d
+*.wiff
+*.mgf
+*.msp
+*.db
+
+# 2. Other scientific data formats (high token count, zero code logic)
+*.csv
+*.tsv
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.parquet
+*.feather
+
+# 3. Plots and rendered output
+*.png
+*.pdf
+*.svg
+*.html
+
+# 4. Notebooks (the classic token-bloat trap)
+*.ipynb
+.ipynb_checkpoints/
+
+# 5. Packaging / environment noise
+__pycache__/
+*.py[cod]
+.venv/
+env/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# 6. Heavy fixtures and local scratch
+tests/data/
+tests/fixtures/*.json
+drafts/
+scratch/
+*.bak
+*.tmp
+*.swp
+*.swo
+
+# 7. The pack itself
+repomix-output.xml
