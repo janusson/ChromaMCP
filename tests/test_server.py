@@ -10,6 +10,7 @@ with its text intact; and a 100k-point chromatogram must round-trip as a handle.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -20,6 +21,7 @@ import numpy as np
 import pytest
 
 from chromamcp.errors import ReferenceError
+from chromamcp.security import ENV_ALLOWED_ROOT
 from chromamcp.server import ReferenceStore
 from tests.test_io_mzml import _ACC_TIC, _chromatogram, _document, _write
 
@@ -87,7 +89,10 @@ def _mzml_two_peaks(tmp_path: Path) -> Path:
 class _Wire:
     """A real stdio client: spawn the server and speak JSON-RPC to it."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, allowed_root: Path | None = None) -> None:
+        env = dict(os.environ)
+        if allowed_root is not None:
+            env[ENV_ALLOWED_ROOT] = str(allowed_root)
         self.proc = subprocess.Popen(
             [sys.executable, "-m", "chromamcp.server"],
             stdin=subprocess.PIPE,
@@ -95,6 +100,7 @@ class _Wire:
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
+            env=env,
         )
         self._id = 0
         self._rpc(
@@ -150,8 +156,8 @@ class _Wire:
 
 
 @pytest.fixture
-def wire() -> Iterator[_Wire]:
-    client = _Wire()
+def wire(tmp_path: Path) -> Iterator[_Wire]:
+    client = _Wire(allowed_root=tmp_path)
     try:
         yield client
     finally:
@@ -187,6 +193,22 @@ def test_an_unknown_reference_is_refused_over_the_wire(wire: _Wire) -> None:
     result = wire.call("summarise_chromatogram", {"reference": f"{_REF}nope:9"})
     assert result["isError"] is True
     assert "unknown reference" in _text(result)
+
+
+def test_a_path_outside_the_allowed_root_is_refused(tmp_path: Path) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    path = _mzml(outside)
+    client = _Wire(allowed_root=allowed)
+    try:
+        result = client.call("load_chromatogram", {"path": str(path)})
+        assert result["isError"] is True
+        assert "outside the allowed root" in _text(result)
+        assert ENV_ALLOWED_ROOT in _text(result)
+    finally:
+        client.close()
 
 
 def test_load_summarise_release_round_trip(wire: _Wire, tmp_path: Path) -> None:

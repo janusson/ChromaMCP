@@ -18,6 +18,7 @@ __all__ = [
     "InaccessiblePathError",
     "MalformedFileError",
     "MetricInputError",
+    "PathEscapeError",
     "PeakGeometryError",
     "ReferenceError",
     "UnsupportedFormatError",
@@ -58,3 +59,7 @@ class CriteriaError(ChromamcpError):
 
 class ReferenceError(ChromamcpError):
     """Raised when a server-side handle is unknown, or the store is full (W8)."""
+
+
+class PathEscapeError(ChromamcpError):
+    """Raised when a path resolves outside the allowed root (W8.2)."""

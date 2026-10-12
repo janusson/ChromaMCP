@@ -20,6 +20,10 @@ Two rules the code makes explicit:
 the **caller-supplied** windows through the W2 geometry and detects nothing.
 ``assess_sequence`` and ``trend_qc`` are M3 and return "not implemented in this
 unit".
+
+``load_chromatogram`` resolves its path through the **filesystem boundary**
+(``chromamcp.security``): every file-reading tool is confined to the root named by
+``CHROMAMCP_ALLOWED_ROOT`` (W8.2).
 """
 
 from __future__ import annotations
@@ -28,7 +32,6 @@ import logging
 import sys
 from dataclasses import asdict
 from datetime import UTC, datetime
-from pathlib import Path
 
 import numpy as np
 from mcp.server.mcpserver import MCPServer
@@ -58,6 +61,7 @@ from chromamcp.metrics import (
     symmetry_factor,
 )
 from chromamcp.provenance import TOLERANCE_BASIS, file_sha256, library_versions
+from chromamcp.security import FilesystemPolicy, policy_from_env, resolve_path
 from chromamcp.server.store import ReferenceStore
 
 __all__ = ["build_server", "main"]
@@ -228,12 +232,17 @@ def _per_pair(
     return out
 
 
-def build_server() -> MCPServer:
-    """Build the server with its tool set and a fresh reference store."""
+def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
+    """Build the server: its tool set, a reference store and a path policy.
+
+    *policy* defaults to :func:`~chromamcp.security.policy_from_env`, i.e. the
+    root named by ``CHROMAMCP_ALLOWED_ROOT`` or the working directory.
+    """
     server: MCPServer = MCPServer(
         name="chromamcp", version=__version__, instructions=_INSTRUCTIONS
     )
     store = ReferenceStore()
+    policy = policy_from_env() if policy is None else policy
 
     @server.tool(
         name="load_chromatogram",
@@ -241,9 +250,10 @@ def build_server() -> MCPServer:
     )
     def load_chromatogram(path: str) -> dict[str, object]:
         try:
-            chromatograms = read_chromatograms(path)
-            resolved = str(Path(path))
-            digest = file_sha256(resolved)
+            allowed = resolve_path(path, policy=policy)
+            chromatograms = read_chromatograms(allowed)
+            resolved = str(allowed)
+            digest = file_sha256(allowed)
         except ChromamcpError as exc:
             raise ToolError(str(exc)) from exc
         reference = store.put(
