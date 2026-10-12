@@ -18,8 +18,11 @@ Uniform conventions, named here once:
 
 - Every width is measured **above an explicit baseline**, never against zero
   (W2, ``AGENTS.md`` §7.2).
-- Tolerances are ``None`` until W4 derives them from measured convergence; no
-  function returns a tolerance chosen by taste (``AGENTS.md`` §1.3).
+- Every result carries the **tolerance** derived in W4 from measured convergence
+  and recorded in ``TOLERANCES.md`` (the single source is
+  :data:`~chromamcp.metrics.tolerances.TOLERANCE`, checked against the register by
+  ``tests/test_tolerances.py``); no function returns a tolerance chosen by taste
+  (``AGENTS.md`` §1.3).
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from numpy.typing import NDArray
 from chromamcp.errors import MetricInputError
 from chromamcp.geometry import Baseline
 from chromamcp.metrics.result import MetricResult
+from chromamcp.metrics.tolerances import TOLERANCE
 
 __all__ = [
     "FORMULA_IDS",
@@ -85,6 +89,7 @@ def plate_number(*, apex_time: float, half_height_width: float) -> MetricResult:
         value=5.54 * (apex_time / half_height_width) ** 2,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["plate_number"],
+        tolerance=TOLERANCE["plate_number"],
     )
 
 
@@ -123,6 +128,7 @@ def resolution(
         value=value,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["resolution"],
+        tolerance=TOLERANCE["resolution"],
     )
 
 
@@ -152,6 +158,7 @@ def symmetry_factor(
         value=width_at_5pct / (2.0 * front_distance_at_5pct),
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["symmetry_factor"],
+        tolerance=TOLERANCE["symmetry_factor"],
     )
 
 
@@ -177,6 +184,7 @@ def capacity_factor(*, apex_time: float, void_time: float) -> MetricResult:
         value=(apex_time - void_time) / void_time,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["capacity_factor"],
+        tolerance=TOLERANCE["capacity_factor"],
     )
 
 
@@ -206,6 +214,7 @@ def selectivity(
         value=value,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["selectivity"],
+        tolerance=TOLERANCE["selectivity"],
     )
 
 
@@ -248,6 +257,7 @@ def signal_to_noise(
         value=2.0 * signal_height / noise,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["signal_to_noise"],
+        tolerance=TOLERANCE["signal_to_noise"],
     )
 
 
@@ -291,6 +301,7 @@ def peak_to_valley(
         value=smaller / valley_height,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["peak_to_valley"],
+        tolerance=TOLERANCE["peak_to_valley"],
     )
 
 
@@ -308,6 +319,7 @@ def peak_height(*, apex_intensity: float, baseline_at_apex: float) -> MetricResu
         value=apex_intensity - baseline_at_apex,
         unit="counts",
         formula_id=FORMULA_IDS["peak_height"],
+        tolerance=TOLERANCE["peak_height"],
     )
 
 
@@ -347,6 +359,7 @@ def peak_area(
         value=float(np.trapezoid(above, grid[segment])),
         unit="counts·min",
         formula_id=FORMULA_IDS["peak_area"],
+        tolerance=TOLERANCE["peak_area"],
     )
 
 
@@ -378,6 +391,7 @@ def rsd_replicates(replicates: Sequence[float] | NDArray[np.float64]) -> MetricR
         value=value,
         unit="%",
         formula_id=FORMULA_IDS["rsd_replicates"],
+        tolerance=TOLERANCE["rsd_replicates"],
     )
 
 

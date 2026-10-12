@@ -1,7 +1,7 @@
 """W3 tests — the suitability panel.
 
 Each metric is checked against a hand-computed value, and the identifiers a
-reviewer needs (unit, formula id, ``tolerance is None`` until W4) are asserted
+reviewer needs (unit, formula id, and the derived tolerance from W4) are asserted
 alongside.  The refusals are tested too: a bad input is an explicit error, never
 a silently degraded number.
 """
@@ -15,6 +15,7 @@ from chromamcp.errors import MetricInputError
 from chromamcp.geometry import Baseline
 from chromamcp.metrics import (
     FORMULA_IDS,
+    TOLERANCE,
     capacity_factor,
     peak_area,
     peak_height,
@@ -35,7 +36,7 @@ def test_plate_number_value_and_identifiers() -> None:
     assert result.metric_id == "plate_number"
     assert result.unit == "dimensionless"
     assert result.formula_id == FORMULA_IDS["plate_number"]
-    assert result.tolerance is None  # derived in W4, never guessed
+    assert result.tolerance == TOLERANCE["plate_number"]
 
 
 def test_resolution_value() -> None:
@@ -146,7 +147,7 @@ def test_every_metric_carries_a_registered_formula_id() -> None:
     ]
     for result in results:
         assert result.formula_id in set(FORMULA_IDS.values())
-        assert result.tolerance is None
+        assert result.tolerance == TOLERANCE[result.metric_id]
 
 
 # --- refusals ---------------------------------------------------------------

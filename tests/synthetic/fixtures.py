@@ -8,8 +8,10 @@ trace rather than a noiseless idealisation (``M1-BRIEF.md`` §5.2 step 5).
 The :data:`TOLERANCE` values are **derived**, not chosen: each is
 ``2 ×`` the largest relative residual measured over the two working rates and
 eight noise seeds, after the derivation recorded in ``TOLERANCES.md``
-(``AGENTS.md`` §1.3).  If a value changes, the derivation in ``TOLERANCES.md``
-must change with it.
+(``AGENTS.md`` §1.3).  They are re-exported from the package
+(:data:`chromamcp.metrics.tolerances.TOLERANCE`) rather than restated here, so the
+value the ground-truth suite asserts against **is** the value the panel ships;
+``tests/test_tolerances.py`` checks that mapping against ``TOLERANCES.md``.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from chromamcp.geometry import Baseline
+from chromamcp.metrics.tolerances import TOLERANCE as TOLERANCE
 from tests.synthetic.peaks import add_noise, emg, gaussian, sample, two_peaks
 
 # --- fixture parameters -----------------------------------------------------
@@ -40,20 +43,6 @@ SEPARATED_WINDOW = (0.6, 1.7)
 SEPARATED_SECOND_CENTER = 1.25
 OVERLAPPED_WINDOW = (0.6, 1.6)
 OVERLAPPED_SECOND_CENTER = 1.15
-
-#: metric id -> derived relative tolerance.  See ``TOLERANCES.md``.
-TOLERANCE: dict[str, float] = {
-    "plate_number": 2.0e-2,
-    "resolution": 5.0e-2,
-    "symmetry_factor": 5.0e-2,
-    "capacity_factor": 1.0e-2,
-    "selectivity": 1.5e-2,
-    "signal_to_noise": 1.0e-2,
-    "peak_to_valley": 2.0e-2,
-    "peak_area": 2.5e-3,
-    "peak_height": 1.0e-2,
-    "rsd_replicates": 1e-12,
-}
 
 _Trace = tuple[NDArray[np.float64], NDArray[np.float64]]
 _Function = Callable[[NDArray[np.float64]], NDArray[np.float64]]

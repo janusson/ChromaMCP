@@ -34,18 +34,23 @@ with Gaussian noise at 0.2 % of the peak height).  The shipped tolerance is the 
 
 ## Tolerance register
 
-| Metric | Independent expectation route | Discretisation error (noiseless) | Noise residual (8 seeds × 2 rates) | Margin | Tolerance shipped |
-|---|---|---|---|---|---|
-| `N` | dense trace · bisection half-height widths · `5.54 (tR/w½)²` | 1.1e-4 | 9.4e-3 | ×2 | 2.0e-2 |
-| `Rs` | dense trace · bisection widths · `2 (tR2−tR1) / (w½1 + w½2)` | 5.7e-5 | 2.4e-2 | ×2 | 5.0e-2 |
-| `A` (symmetry factor) | dense trace · bisection 5 % widths · `w0.05 / (2 · d_front)` | 1.1e-4 | 2.4e-2 | ×2 | 5.0e-2 |
-| `k′` | dense apex · `(tR − t0) / t0` | 9.0e-12 | 3.3e-3 | ×2 | 1.0e-2 |
-| `α` | dense apexes · `(tR2 − t0) / (tR1 − t0)` | 1.4e-8 | 6.9e-3 | ×2 | 1.5e-2 |
-| `S/N` | dense apex height vs a blank region of known amplitude | < 1e-12 | 3.3e-3 | ×2 | 1.0e-2 |
-| `p/v` | dense apexes and valley · `h_smaller / h_valley` | 2.5e-4 | 9.2e-3 | ×2 | 2.0e-2 |
-| `area` | dense trapezoid over the window | 2.2e-16 | 1.0e-3 | ×2 | 2.5e-3 |
-| `height` | dense apex height above the baseline | < 1e-12 | 3.3e-3 | ×2 | 1.0e-2 |
-| `%RSD` | exact arithmetic (sample sd, n − 1) | 0 (exact) | 0 (exact) | — | 1e-12 |
+| Metric id | Metric | Independent expectation route | Discretisation error (noiseless) | Noise residual (8 seeds × 2 rates) | Margin | Tolerance shipped |
+|---|---|---|---|---|---|---|
+| `plate_number` | `N` | dense trace · bisection half-height widths · `5.54 (tR/w½)²` | 1.1e-4 | 9.4e-3 | ×2 | 2.0e-2 |
+| `resolution` | `Rs` | dense trace · bisection widths · `2 (tR2−tR1) / (w½1 + w½2)` | 5.7e-5 | 2.4e-2 | ×2 | 5.0e-2 |
+| `symmetry_factor` | `A` (symmetry factor) | dense trace · bisection 5 % widths · `w0.05 / (2 · d_front)` | 1.1e-4 | 2.4e-2 | ×2 | 5.0e-2 |
+| `capacity_factor` | `k′` | dense apex · `(tR − t0) / t0` | 9.0e-12 | 3.3e-3 | ×2 | 1.0e-2 |
+| `selectivity` | `α` | dense apexes · `(tR2 − t0) / (tR1 − t0)` | 1.4e-8 | 6.9e-3 | ×2 | 1.5e-2 |
+| `signal_to_noise` | `S/N` | dense apex height vs a blank region of known amplitude | < 1e-12 | 3.3e-3 | ×2 | 1.0e-2 |
+| `peak_to_valley` | `p/v` | dense apexes and valley · `h_smaller / h_valley` | 2.5e-4 | 9.2e-3 | ×2 | 2.0e-2 |
+| `peak_area` | `area` | dense trapezoid over the window | 2.2e-16 | 1.0e-3 | ×2 | 2.5e-3 |
+| `peak_height` | `height` | dense apex height above the baseline | < 1e-12 | 3.3e-3 | ×2 | 1.0e-2 |
+| `rsd_replicates` | `%RSD` | exact arithmetic (sample sd, n − 1) | 0 (exact) | 0 (exact) | — | 1e-12 |
+
+The **Metric id** column is the id the code emits, so it matches `SOURCES.md` and `FORMULA_IDS`. The
+**Tolerance shipped** column is the value the panel attaches to every result
+(`src/chromamcp/metrics/tolerances.py`); `tests/test_tolerances.py` asserts the column equals that
+mapping, so the shipped number and the recorded derivation cannot drift apart.
 
 Notes.  These are the tolerances the W4 suite asserts against; they are relative.  `A` uses the EMG
 fixture because a Gaussian cannot exercise tailing.  `k′` and `α` inherit any error in the supplied
