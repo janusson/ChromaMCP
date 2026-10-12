@@ -19,6 +19,7 @@ __all__ = [
     "MalformedFileError",
     "MetricInputError",
     "PeakGeometryError",
+    "ReferenceError",
     "UnsupportedFormatError",
 ]
 
@@ -53,3 +54,7 @@ class ChannelResolutionError(ChromamcpError):
 
 class CriteriaError(ChromamcpError):
     """Raised when a criteria file cannot be parsed or violates the §6 contract."""
+
+
+class ReferenceError(ChromamcpError):
+    """Raised when a server-side handle is unknown, or the store is full (W8)."""

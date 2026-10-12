@@ -29,11 +29,12 @@ def test_runtime_dependencies_are_bounded() -> None:
     ``AGENTS.md`` §5: the scaffold ships zero runtime dependencies and every
     addition is recorded at the point of addition.  W1 records ``numpy`` (the
     mzML reader is standard-library only); W6 records ``pyyaml`` (the criteria
-    file is YAML per ``M1-BRIEF.md`` §6).
+    file is YAML per ``M1-BRIEF.md`` §6); W8 records ``mcp`` (M2 is a stdio MCP
+    server, ``M2-BRIEF.md`` §1).
     """
     requires = metadata.requires("chromamcp") or []
     runtime = [r for r in requires if "extra ==" not in r]
     names = {re.split(r"[<>=!~;\[\s]", r, maxsplit=1)[0].lower() for r in runtime}
-    assert names == {"numpy", "pyyaml"}, (
+    assert names == {"mcp", "numpy", "pyyaml"}, (
         f"unexpected runtime dependencies: {sorted(names)}"
     )

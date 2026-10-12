@@ -54,21 +54,50 @@ def test_no_banned_vocabulary_in_the_tree() -> None:
     assert offenders == [], f"banned vocabulary found: {offenders}"
 
 
+def _imported_modules(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            modules.add(node.module)
+    return modules
+
+
+def _compute_path_files() -> list[Path]:
+    """The compute path: everything under ``src/chromamcp`` except the server.
+
+    The server (W8) is the one sanctioned ``mcp`` importer; the compute
+    subpackages must stay free of the SDK, network clients, LLM clients and
+    vendor parsers (``AGENTS.md`` §3).
+    """
+    package = _ROOT / "src" / "chromamcp"
+    files = list(package.glob("*.py"))
+    for name in ("io", "geometry", "metrics", "criteria", "provenance"):
+        files.extend((package / name).rglob("*.py"))
+    return sorted(files)
+
+
 def test_compute_path_imports_nothing_forbidden() -> None:
     offenders: list[str] = []
-    for path in sorted((_ROOT / "src").rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            modules: list[str] = []
-            if isinstance(node, ast.Import):
-                modules = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                modules = [node.module]
-            for module in modules:
-                top = module.split(".")[0]
-                if top in FORBIDDEN_TOP_LEVEL or module in FORBIDDEN_EXACT:
-                    offenders.append(f"{path.relative_to(_ROOT)}: {module}")
+    for path in _compute_path_files():
+        for module in _imported_modules(path):
+            top = module.split(".")[0]
+            if top in FORBIDDEN_TOP_LEVEL or module in FORBIDDEN_EXACT:
+                offenders.append(f"{path.relative_to(_ROOT)}: {module}")
     assert offenders == [], f"forbidden imports in the compute path: {offenders}"
+
+
+def test_the_mcp_sdk_is_imported_only_by_the_server_package() -> None:
+    importers = [
+        path.relative_to(_ROOT).as_posix()
+        for path in sorted((_ROOT / "src").rglob("*.py"))
+        if any(module.split(".")[0] == "mcp" for module in _imported_modules(path))
+    ]
+    assert importers == ["src/chromamcp/server/server.py"], (
+        f"only the server may import the mcp SDK, but found: {importers}"
+    )
 
 
 def test_provenance_record_covers_the_required_fields(tmp_path: Path) -> None:

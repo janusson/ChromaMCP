@@ -20,7 +20,17 @@ requires-python = ">=3.13"
 # MIT-compatible (AGENTS.md §6) and is used only through `yaml.safe_load`, which
 # constructs no arbitrary objects.  (Recorded alternative: TOML via the stdlib
 # `tomllib` would avoid this dependency but change the brief's shown format.)
+#
+# W8 (2026-10-11) adds `mcp`: M2 is a local MCP server over stdio, and the SDK is
+# the one sanctioned way to speak the protocol (M2-BRIEF.md §1; DECISIONS.md §6
+# records the decision).  MIT-licensed (AGENTS.md §6).  It is heavier than the
+# first two: it brings pydantic and anyio, and its transport extras bring
+# starlette/uvicorn/httpx — a server stack the project does NOT use, because the
+# transport is stdio and nothing else (AGENTS.md §3).  Only
+# `src/chromamcp/server/` imports it; `tests/test_hardening.py` asserts the
+# compute path stays free of it and that the server package is the sole importer.
 dependencies = [
+    "mcp>=2.3.0",
     "numpy>=2.1",
     "pyyaml>=6.0",
 ]
