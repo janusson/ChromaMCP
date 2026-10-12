@@ -14,8 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from chromamcp.metrics import plate_number
+from chromamcp.metrics import TOLERANCE, plate_number
 from chromamcp.provenance import (
+    TOLERANCE_BASIS,
     Criteria,
     MetricRecord,
     ProvenanceRecord,
@@ -69,6 +70,7 @@ def test_record_schema(tmp_path: Path) -> None:
         "reader",
         "timestamp_utc",
         "timestamp_note",
+        "tolerance_basis",
     }
     assert set(data["input_file"]) == {"path", "sha256"}
     assert set(data["reader"]) == {"name", "version"}
@@ -91,6 +93,18 @@ def test_record_schema(tmp_path: Path) -> None:
         "verdict",
     }
     assert metric["verdict"] == "not-evaluated"
+
+
+def test_the_tolerance_basis_is_stated(tmp_path: Path) -> None:
+    """A bare tolerance number is ambiguous; the record states its basis.
+
+    Every panel tolerance is **relative** (a fraction of the independently
+    expected value), so the record says so and ties the number to the shipped
+    mapping — a reviewer reading ``0.02`` can tell it means 2 %.
+    """
+    data = json.loads(serialise(_sample_record(_input_file(tmp_path))))
+    assert data["tolerance_basis"] == TOLERANCE_BASIS
+    assert data["metrics"][0]["tolerance"] == TOLERANCE["plate_number"]
 
 
 def test_float_formatting_is_pinned(tmp_path: Path) -> None:

@@ -50,7 +50,10 @@ with Gaussian noise at 0.2 % of the peak height).  The shipped tolerance is the 
 The **Metric id** column is the id the code emits, so it matches `SOURCES.md` and `FORMULA_IDS`. The
 **Tolerance shipped** column is the value the panel attaches to every result
 (`src/chromamcp/metrics/tolerances.py`); `tests/test_tolerances.py` asserts the column equals that
-mapping, so the shipped number and the recorded derivation cannot drift apart.
+mapping, so the shipped number and the recorded derivation cannot drift apart. Every shipped
+tolerance is on the **relative** basis — a fraction of the independently expected value — and the
+provenance record states that basis (`tolerance_basis`), so a bare number cannot be read as an
+absolute bound in the metric's own unit.
 
 Notes.  These are the tolerances the W4 suite asserts against; they are relative.  `A` uses the EMG
 fixture because a Gaussian cannot exercise tailing.  `k′` and `α` inherit any error in the supplied

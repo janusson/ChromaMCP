@@ -29,7 +29,7 @@ _VOCABULARY_TARGETS = (
     *sorted((_ROOT / "tests").rglob("*.py")),
 )
 
-_SECTION_4_FIELDS = (
+_RECORD_FIELDS = (
     "input_file",
     "reader",
     "parameters",
@@ -38,6 +38,9 @@ _SECTION_4_FIELDS = (
     "metrics",
     "timestamp_utc",
     "timestamp_note",
+    # Not a §4 field: the basis every tolerance is stated on, so a bare number in
+    # the record cannot be read as an absolute bound (the W7.2 addition).
+    "tolerance_basis",
 )
 
 
@@ -68,7 +71,7 @@ def test_compute_path_imports_nothing_forbidden() -> None:
     assert offenders == [], f"forbidden imports in the compute path: {offenders}"
 
 
-def test_provenance_record_covers_the_section_4_fields(tmp_path: Path) -> None:
+def test_provenance_record_covers_the_required_fields(tmp_path: Path) -> None:
     path = tmp_path / "chromatogram.mzML"
     path.write_bytes(b"synthetic fixture")
     record = build_record(
@@ -80,7 +83,7 @@ def test_provenance_record_covers_the_section_4_fields(tmp_path: Path) -> None:
         timestamp=datetime(2026, 10, 11, tzinfo=UTC),
     )
     data = json.loads(serialise(record))
-    for field in _SECTION_4_FIELDS:
+    for field in _RECORD_FIELDS:
         assert field in data, f"provenance record is missing '{field}'"
     assert "sha256" in data["input_file"]
     assert {

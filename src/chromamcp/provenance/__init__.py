@@ -7,6 +7,7 @@ same input, parameters and versions produce byte-identical output.
 from __future__ import annotations
 
 from chromamcp.provenance.record import (
+    TOLERANCE_BASIS,
     VERDICTS,
     Criteria,
     InputFile,
@@ -22,6 +23,7 @@ from chromamcp.provenance.record import (
 )
 
 __all__ = [
+    "TOLERANCE_BASIS",
     "VERDICTS",
     "Criteria",
     "InputFile",

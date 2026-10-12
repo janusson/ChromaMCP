@@ -20,6 +20,11 @@ cannot carry are written as the strings ``"NaN"``, ``"Infinity"`` and
 ``"-Infinity"`` — never as invalid JSON, and never as ``0``, which would make a
 missing value indistinguishable from a measured zero (``AGENTS.md`` §1.6).
 
+Every tolerance in the record is stated on the **relative** basis (a fraction of
+the independently expected value), and the record says so via
+:data:`TOLERANCE_BASIS` — a bare number in an evidence record would let a reviewer
+read ``0.02`` as an absolute bound in the metric's own unit.
+
 Vocabulary discipline (``AGENTS.md`` §2) applies to every field name and string
 here: the record is evidence a qualified person can review, and it asserts
 nothing more.
@@ -40,6 +45,7 @@ from pathlib import Path
 from chromamcp.metrics import MetricResult
 
 __all__ = [
+    "TOLERANCE_BASIS",
     "VERDICTS",
     "Criteria",
     "InputFile",
@@ -61,6 +67,13 @@ VERDICTS = frozenset({"pass", "flag", "not-evaluated"})
 
 _TIMESTAMP_NOTE = "run time, not acquisition time"
 _TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+#: The basis every panel tolerance is stated on.  The tolerances derived in W4
+#: (``TOLERANCES.md``, :data:`chromamcp.metrics.tolerances.TOLERANCE`) are
+#: **relative** — a fraction of the independently expected value — and the record
+#: states that basis explicitly, so a reviewer reading a bare number cannot
+#: mistake it for an absolute bound in the metric's own unit.
+TOLERANCE_BASIS = "relative"
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +154,7 @@ class ProvenanceRecord:
     metrics: tuple[MetricRecord, ...]
     timestamp_utc: str
     timestamp_note: str = _TIMESTAMP_NOTE
+    tolerance_basis: str = TOLERANCE_BASIS
 
 
 def utc_now() -> datetime:
