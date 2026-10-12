@@ -2,8 +2,10 @@
 
 **This is a finding, not a decision.** Per `AGENTS.md` §3, the scope table is changed only by a
 decision the maintainer records in the coordination hub (`~/Hermes/Projects/ChromaMCP/`) — not by an
-implementation choice made in a branch. Nothing here is resolved; each item names both readings and
-what a decision would have to settle.
+implementation choice made in a branch. Each item names both readings and what a decision would have
+to settle. **All three are settled now:** the answers are in `DECISIONS.md` §4 (Q1 and Q3 recorded as
+defaults on 2026-10-11, Q2 parked as W15), so this file is the finding those decisions were made
+against, not an open list.
 
 **What prompted it.** An external report proposes a ChromaMCP MCP server — JSON-Schema tool
 definitions plus a pytest suite — covering system suitability, USP 〈621〉 method scaling,
@@ -55,6 +57,7 @@ this repository's rules already speak to.
 - **Provenance:** the report asserts it contains "all the exact" 〈621〉/〈1058〉/Q2(R2) equations; a
   report is not a primary source (`SOURCES.md` rules 1–3).
 - **Gate:** it instructs bare `pytest test_chroma_mcp.py` after `pip install … numpy`; the gate is
-  `make check` (`.github/workflows/ci.yml`), and `numpy` is not yet a declared dependency (§5).
+  `make check` (`.github/workflows/ci.yml`). The report's instruction predates `numpy` being declared
+  as a dependency here (W1).
 - **The pasted suite would not run as given:** `concs =`, `responses =` and `rep_areas =` are empty
   (`SyntaxError`), and one assertion compares a list to a float (`TypeError`).

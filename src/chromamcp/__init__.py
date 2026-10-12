@@ -1,12 +1,15 @@
 """ChromaMCP — an MCP server for the chromatography half of LC-MS and GC-MS methods.
 
-Deliberately near-empty at the scaffold stage: the package exists so that the gate, the
-layout and the packaging are settled before a single metric is written.
+The package holds the mzML reader (``io``), the peak geometry (``geometry``), the
+system-suitability panel (``metrics``), the criteria-file contract (``criteria``), the
+provenance record (``provenance``), the filesystem boundary (``security``) and the
+stdio MCP surface (``server``).  The compute path is all of those except ``server``,
+which is the one module that imports the ``mcp`` SDK.
 
 The rules that bind this repository live in ``AGENTS.md`` at the repository root, and
-behind it in ``SOURCES.md`` and ``TOLERANCES.md`` and in the project documents in the
-coordination hub (``~/Hermes/Projects/ChromaMCP/`` — ``M1-BRIEF.md`` §7 for the
-implementer rules and ``PLAN.md`` §3 for the claims this project must never make). An
+behind it ``SOURCES.md`` and ``TOLERANCES.md`` and the project documents in the
+coordination hub (``~/Hermes/Projects/ChromaMCP/`` — the milestone briefs for the
+implementer rules, and ``PLAN.md`` §3 for the claims this project must never make). An
 uncited metric does not ship.
 """
 
