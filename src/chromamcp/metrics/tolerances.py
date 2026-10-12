@@ -13,8 +13,9 @@ is the single source of truth for them: the panel attaches the value to every
 ``tests/test_tolerances.py`` checks it against the register in ``TOLERANCES.md``
 so the shipped number and the recorded derivation cannot drift apart.
 
-``signal_to_noise`` carries the open ``P1`` caveat: its convention is not settled,
-so its tolerance may move with the convention (``DECISIONS.md`` §1).
+``signal_to_noise``'s convention is settled by ``DECISIONS.md`` §1 (``S/N = 2H/h``,
+peak-to-peak over the 5×-half-height-width window), so every tolerance here is the
+derived one.
 """
 
 from __future__ import annotations

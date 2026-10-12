@@ -57,8 +57,8 @@ absolute bound in the metric's own unit.
 
 Notes.  These are the tolerances the W4 suite asserts against; they are relative.  `A` uses the EMG
 fixture because a Gaussian cannot exercise tailing.  `k′` and `α` inherit any error in the supplied
-`t0`, which is reported separately.  `S/N` carries the `P1` caveat — its convention is not settled —
-so its tolerance may move with the convention.
+`t0`, which is reported separately.  `S/N`'s convention is settled (`DECISIONS.md` §1: `2H/h`,
+peak-to-peak, over the 5×-half-height-width window), so its tolerance stands as derived.
 
 ## Sampling rates used
 

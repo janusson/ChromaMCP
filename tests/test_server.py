@@ -58,6 +58,32 @@ def _mzml(tmp_path: Path, n_points: int = 400) -> Path:
     return _write(tmp_path, text)
 
 
+def _two_peak_trace(
+    n_points: int = 500, *, step: float = 0.001
+) -> tuple[list[float], list[float]]:
+    time = np.arange(n_points, dtype=np.float64) * step
+    intensity = np.exp(-0.5 * ((time - 0.15) / 0.03) ** 2) + 0.8 * np.exp(
+        -0.5 * ((time - 0.35) / 0.03) ** 2
+    )
+    return time.tolist(), intensity.tolist()
+
+
+def _mzml_two_peaks(tmp_path: Path) -> Path:
+    time, intensity = _two_peak_trace()
+    text = _document(
+        [
+            _chromatogram(
+                "tic",
+                kind_accession=_ACC_TIC,
+                kind_name="total ion chromatogram",
+                time=time,
+                intensity=intensity,
+            )
+        ]
+    )
+    return _write(tmp_path, text)
+
+
 class _Wire:
     """A real stdio client: spawn the server and speak JSON-RPC to it."""
 
@@ -252,3 +278,67 @@ def test_a_released_handle_is_gone() -> None:
 def test_releasing_an_unknown_handle_is_refused() -> None:
     with pytest.raises(ReferenceError):
         ReferenceStore().release(f"{_REF}nope:1")
+
+
+def test_get_validates_the_handle_kind() -> None:
+    store = ReferenceStore()
+    reference = store.put("peaks", {"rows": []})
+    with pytest.raises(ReferenceError):
+        store.get(reference, expect="chromatograms")
+    assert store.get(reference, expect="peaks") == {"rows": []}
+
+
+# --- the wrong-kind handle, and honest omissions ----------------------------
+def test_a_wrong_kind_handle_is_refused_with_a_reason(
+    wire: _Wire, tmp_path: Path
+) -> None:
+    """A peaks handle where a chromatogram is wanted must say so.
+
+    A bare ``KeyError`` at the call site would have its text withheld by the SDK,
+    so the store refuses the mismatch itself and the reason survives the wire.
+    """
+    loaded = _payload(wire.call("load_chromatogram", {"path": str(_mzml(tmp_path))}))
+    peaks = _payload(
+        wire.call(
+            "integrate_peaks",
+            {
+                "reference": str(loaded["reference"]),
+                "channel": 0,
+                "windows": [[0, 399]],
+            },
+        )
+    )
+    result = wire.call("summarise_chromatogram", {"reference": str(peaks["reference"])})
+    assert result["isError"] is True
+    assert "wrong kind" in _text(result)
+
+
+def test_selectivity_is_reported_not_evaluated(wire: _Wire, tmp_path: Path) -> None:
+    loaded = _payload(
+        wire.call("load_chromatogram", {"path": str(_mzml_two_peaks(tmp_path))})
+    )
+    peaks = _payload(
+        wire.call(
+            "integrate_peaks",
+            {
+                "reference": str(loaded["reference"]),
+                "channel": 0,
+                "windows": [[0, 249], [250, 499]],
+            },
+        )
+    )
+    assert peaks["n_peaks"] == 2
+    reference = str(peaks["reference"])
+
+    with_pairs = _payload(
+        wire.call("compute_suitability", {"peaks": reference, "pairs": [[0, 1]]})
+    )
+    pairs_missing = {
+        item["metric_id"]: item["reason"] for item in with_pairs["not_evaluated"]
+    }
+    assert "void_time" in pairs_missing["selectivity"]
+    assert "resolution" not in pairs_missing
+
+    without_pairs = _payload(wire.call("compute_suitability", {"peaks": reference}))
+    names = {item["metric_id"] for item in without_pairs["not_evaluated"]}
+    assert {"resolution", "selectivity"} <= names

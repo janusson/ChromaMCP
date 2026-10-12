@@ -226,8 +226,8 @@ def signal_to_noise(
     ``S/N = 2 H / h``, with ``H`` the peak height above the baseline and ``h``
     the **peak-to-peak** noise of a blank region the caller supplies.
 
-    Conventions — this is the panel's designated trap, and the one convention
-    still open (ping point **P1**).  ``SOURCES.md`` records the harmonised noise
+    Conventions — this is the panel's designated trap; its convention is now
+    settled (``DECISIONS.md`` §1).  ``SOURCES.md`` records the harmonised noise
     range as tied to the peak's half-height width (a window of five times that
     width, from a blank at the expected retention time); the caller selects that
     window and passes the blank samples here.  This function fixes the statistic
@@ -235,8 +235,9 @@ def signal_to_noise(
     mix with, the RMS (``6σ``) form and the plain ``H/h`` form, which give
     different numbers from the same blank — mixing them is the failure the
     convention must prevent.  A vendor 20×-window variant is also recorded in
-    ``SOURCES.md`` and is not used here.  Pending Eric's house convention (P1),
-    this reading is a stated default, not a settled one.
+    ``SOURCES.md`` and is not used here.  ``DECISIONS.md`` §1 keeps this reading
+    as shipped, so the ``SOURCES.md`` convention row and the ``TOLERANCES.md``
+    ``S/N`` row stand as derived.
     """
     _require_finite("signal_height", signal_height)
     blank = np.asarray(blank_intensity, dtype=np.float64)

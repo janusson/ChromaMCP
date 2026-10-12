@@ -46,15 +46,27 @@ class ReferenceStore:
         self._items[reference] = payload
         return reference
 
-    def get(self, reference: str) -> Any:
-        """Return the payload for *reference*, or refuse it explicitly."""
+    def get(self, reference: str, *, expect: str | None = None) -> Any:
+        """Return the payload for *reference*, or refuse it explicitly.
+
+        *expect* names the handle kind the caller needs.  A handle of the wrong
+        kind is refused here with an actionable message, rather than surfacing a
+        ``KeyError`` at the call site — whose text the SDK withholds from the
+        model (``M2-BRIEF.md`` §7).
+        """
         try:
-            return self._items[reference]
+            payload = self._items[reference]
         except KeyError:
             raise ReferenceError(
                 f"unknown reference '{reference}'. Load a chromatogram first, "
                 f"and do not reuse a handle after release_reference."
             ) from None
+        if expect is not None and not reference.startswith(f"{PREFIX}{expect}:"):
+            raise ReferenceError(
+                f"reference '{reference}' is a handle of the wrong kind; this "
+                f"call needs a '{PREFIX}{expect}:…' handle."
+            )
+        return payload
 
     def release(self, reference: str) -> None:
         """Free *reference*.  Releasing an unknown handle is refused, not ignored."""

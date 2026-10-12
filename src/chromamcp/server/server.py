@@ -265,7 +265,7 @@ def build_server() -> MCPServer:
     )
     def summarise_chromatogram(reference: str) -> dict[str, object]:
         try:
-            payload = store.get(reference)
+            payload = store.get(reference, expect="chromatograms")
         except ChromamcpError as exc:
             raise ToolError(str(exc)) from exc
         chromatograms = payload["channels"]
@@ -298,7 +298,7 @@ def build_server() -> MCPServer:
         reference: str, channel: int, windows: list[list[int]]
     ) -> dict[str, object]:
         try:
-            payload = store.get(reference)
+            payload = store.get(reference, expect="chromatograms")
         except ChromamcpError as exc:
             raise ToolError(str(exc)) from exc
         chromatograms = payload["channels"]
@@ -345,7 +345,7 @@ def build_server() -> MCPServer:
         replicate_areas: list[float] | None = None,
     ) -> dict[str, object]:
         try:
-            payload = store.get(peaks)
+            payload = store.get(peaks, expect="peaks")
         except ChromamcpError as exc:
             raise ToolError(str(exc)) from exc
         rows = payload["rows"]
@@ -371,6 +371,13 @@ def build_server() -> MCPServer:
         if not pairs:
             not_evaluated.append(
                 {"metric_id": "resolution", "reason": "supply pairs of peak indices."}
+            )
+            not_evaluated.append(
+                {"metric_id": "selectivity", "reason": "supply pairs of peak indices."}
+            )
+        elif void_time is None:
+            not_evaluated.append(
+                {"metric_id": "selectivity", "reason": "supply void_time."}
             )
         if not replicate_areas:
             not_evaluated.append(
