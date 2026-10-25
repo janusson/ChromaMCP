@@ -240,13 +240,22 @@ def test_a_100k_point_chromatogram_round_trips_as_a_handle(
     )
 
 
-def test_every_response_carries_provenance(wire: _Wire, tmp_path: Path) -> None:
+def test_every_response_carries_evidence_and_a_separate_event_block(
+    wire: _Wire, tmp_path: Path
+) -> None:
     loaded = _payload(wire.call("load_chromatogram", {"path": str(_mzml(tmp_path))}))
     provenance = loaded["provenance"]
     assert isinstance(provenance, dict)
     assert provenance["tolerance_basis"] == "relative"
-    assert provenance["timestamp_note"] == "run time, not acquisition time"
     assert provenance["input_file"]["sha256"]
+    assert provenance["operation"]["tool"] == "load_chromatogram"
+
+    # The clock is metadata about the call, not evidence about the file, so it
+    # lives in `event` and the evidence block stays reproducible.
+    assert "timestamp_utc" not in provenance
+    event = loaded["event"]
+    assert event["timestamp_note"] == "run time, not acquisition time"
+    assert str(event["timestamp_utc"]).endswith("Z")
 
 
 # --- the panel over the wire ------------------------------------------------
@@ -364,3 +373,204 @@ def test_selectivity_is_reported_not_evaluated(wire: _Wire, tmp_path: Path) -> N
     without_pairs = _payload(wire.call("compute_suitability", {"peaks": reference}))
     names = {item["metric_id"] for item in without_pairs["not_evaluated"]}
     assert {"resolution", "selectivity"} <= names
+
+
+# --- measurement lineage (F3) -----------------------------------------------
+def _canonical(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _two_peak_handles(wire: _Wire, tmp_path: Path) -> tuple[Any, Any]:
+    loaded = _payload(
+        wire.call("load_chromatogram", {"path": str(_mzml_two_peaks(tmp_path))})
+    )
+    peaks = _payload(
+        wire.call(
+            "integrate_peaks",
+            {
+                "reference": str(loaded["reference"]),
+                "channel": 0,
+                "windows": [[0, 249], [250, 499]],
+            },
+        )
+    )
+    return loaded, peaks
+
+
+def test_a_peak_row_carries_its_window_apex_and_a_measurable_area(
+    wire: _Wire, tmp_path: Path
+) -> None:
+    """Every number in the row is reconstructable from the row itself."""
+    _loaded, peaks = _two_peak_handles(wire, tmp_path)
+    row = peaks["peaks"][0]
+
+    assert row["id"] == "peak:c0:w0-249"
+    assert row["channel"] == 0
+    assert row["window"] == {
+        "left_index": 0,
+        "right_index": 249,
+        "t_left_min": 0.0,
+        "t_right_min": row["window"]["t_right_min"],
+    }
+    assert 0.0 < row["window"]["t_right_min"] < 0.25
+    assert row["baseline_rule"] == "linear"
+    assert 0 <= row["apex"]["index"] <= 249
+    assert row["apex"]["height"] == pytest.approx(
+        row["apex"]["intensity"] - row["apex"]["baseline"]
+    )
+    assert row["widths"]["half_min"] > 0.0
+
+    area = row["measurements"]["area"]
+    assert area["measurement_id"] == "peak_area@peak:c0:w0-249"
+    assert area["metric_id"] == "peak_area"
+    assert area["formula_id"] == "peak_area"
+    assert area["unit"] == "counts·min"
+    assert area["tolerance"] is not None
+    assert area["peaks"] == ["peak:c0:w0-249"]
+
+
+def test_every_metric_row_names_its_subject(wire: _Wire, tmp_path: Path) -> None:
+    """Two peaks produce rows whose subjects are explicit, not positional."""
+    _loaded, peaks = _two_peak_handles(wire, tmp_path)
+    panel = _payload(
+        wire.call(
+            "compute_suitability",
+            {
+                "peaks": str(peaks["reference"]),
+                "pairs": [[0, 1]],
+                "void_time": 0.05,
+                "replicate_areas": [1.0, 2.0],
+            },
+        )
+    )
+    subjects = {str(row["subject"]) for row in panel["metrics"]}
+    assert "peak:c0:w0-249" in subjects
+    assert "peak:c0:w250-499" in subjects
+    assert "peak:c0:w0-249|peak:c0:w250-499" in subjects
+    assert "replicates:n=2" in subjects
+
+    for row in panel["metrics"]:
+        assert str(row["measurement_id"]).startswith(f"{row['metric_id']}@")
+        assert str(row["subject"]) in str(row["measurement_id"])
+        if row["metric_id"] == "rsd_replicates":
+            assert row["peaks"] == []
+        else:
+            assert row["peaks"]
+
+    pair_rows = [row for row in panel["metrics"] if "|" in str(row["subject"])]
+    assert pair_rows
+    for row in pair_rows:
+        assert row["peaks"] == ["peak:c0:w0-249", "peak:c0:w250-499"]
+
+
+def test_the_panel_accounts_for_every_metric_it_did_not_compute(
+    wire: _Wire, tmp_path: Path
+) -> None:
+    """An absent value is stated as an omission with its reason, never dropped."""
+    _loaded, peaks = _two_peak_handles(wire, tmp_path)
+    panel = _payload(
+        wire.call("compute_suitability", {"peaks": str(peaks["reference"])})
+    )
+    missing = {item["metric_id"]: item["reason"] for item in panel["not_evaluated"]}
+    assert {
+        "peak_to_valley",
+        "signal_to_noise",
+        "capacity_factor",
+        "resolution",
+        "selectivity",
+        "rsd_replicates",
+    } <= set(missing)
+    # The S/N omission states the window the caller has to supply, in the
+    # pharmacopoeial order: 20x primary, 5x the permitted fallback.
+    assert "20" in missing["signal_to_noise"]
+    assert "5" in missing["signal_to_noise"]
+
+
+# --- canonical evidence (F6) -------------------------------------------------
+def test_the_evidence_block_is_byte_identical_for_the_same_request(
+    wire: _Wire, tmp_path: Path
+) -> None:
+    loaded = _payload(
+        wire.call("load_chromatogram", {"path": str(_mzml_two_peaks(tmp_path))})
+    )
+    reference = str(loaded["reference"])
+    first = _payload(wire.call("summarise_chromatogram", {"reference": reference}))
+    second = _payload(wire.call("summarise_chromatogram", {"reference": reference}))
+
+    assert _canonical(first["provenance"]) == _canonical(second["provenance"])
+    without_clock_first = {k: v for k, v in first.items() if k != "event"}
+    without_clock_second = {k: v for k, v in second.items() if k != "event"}
+    assert _canonical(without_clock_first) == _canonical(without_clock_second)
+
+
+def test_a_handle_is_a_digest_of_the_request_not_an_allocation(
+    tmp_path: Path,
+) -> None:
+    """Two fresh processes loading one file agree, handle and evidence alike."""
+    path = _mzml_two_peaks(tmp_path)
+    first_client = _Wire(allowed_root=tmp_path)
+    second_client = _Wire(allowed_root=tmp_path)
+    try:
+        first = _payload(first_client.call("load_chromatogram", {"path": str(path)}))
+        second = _payload(second_client.call("load_chromatogram", {"path": str(path)}))
+    finally:
+        first_client.close()
+        second_client.close()
+
+    assert first["reference"] == second["reference"]
+    assert _canonical(first["provenance"]) == _canonical(second["provenance"])
+
+
+def test_the_operation_record_carries_the_arguments(
+    wire: _Wire, tmp_path: Path
+) -> None:
+    _loaded, peaks = _two_peak_handles(wire, tmp_path)
+    panel = _payload(
+        wire.call(
+            "compute_suitability",
+            {"peaks": str(peaks["reference"]), "pairs": [[0, 1]], "void_time": 0.05},
+        )
+    )
+    operation = panel["provenance"]["operation"]
+    assert operation["tool"] == "compute_suitability"
+    arguments = operation["arguments"]
+    assert arguments["pairs"] == [[0, 1]]
+    assert arguments["void_time"] == pytest.approx(0.05)
+    assert arguments["baseline_rule"] == "linear"
+
+
+def test_a_missing_sample_is_refused_rather_than_emitted(
+    wire: _Wire, tmp_path: Path
+) -> None:
+    """A NaN in a trace is a missing measurement, and no geometry is defined on it.
+
+    JSON has no number for a missing value, so the reader's convention
+    (``AGENTS.md`` §1.6) reaches the wire as a refusal with its reason, never as a
+    NaN token or a silently filled zero.
+    """
+    time, intensity = _two_peak_trace()
+    intensity[100] = float("nan")
+    text = _document(
+        [
+            _chromatogram(
+                "tic",
+                kind_accession=_ACC_TIC,
+                kind_name="total ion chromatogram",
+                time=time,
+                intensity=intensity,
+            )
+        ]
+    )
+    loaded = _payload(
+        wire.call("load_chromatogram", {"path": str(_write(tmp_path, text))})
+    )
+    result = wire.call(
+        "integrate_peaks",
+        {
+            "reference": str(loaded["reference"]),
+            "channel": 0,
+            "windows": [[0, 249]],
+        },
+    )
+    assert result["isError"] is True
+    assert "non-finite" in _text(result)
