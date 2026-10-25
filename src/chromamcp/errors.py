@@ -21,6 +21,7 @@ __all__ = [
     "PathEscapeError",
     "PeakGeometryError",
     "ReferenceError",
+    "SourceChangedError",
     "UnsupportedFormatError",
 ]
 
@@ -39,6 +40,14 @@ class UnsupportedFormatError(ChromamcpError):
 
 class MalformedFileError(ChromamcpError):
     """Raised when a file is opened but does not parse as valid mzML."""
+
+
+class SourceChangedError(ChromamcpError):
+    """Raised when a file changes between being opened and being measured.
+
+    No evidence is issued for an input whose identity cannot be tied to the bytes
+    that were parsed.
+    """
 
 
 class MetricInputError(ChromamcpError):

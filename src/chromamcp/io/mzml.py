@@ -29,6 +29,14 @@ rather than guessing:
 - *Kind.*  A chromatogram is classified as TIC (``MS:1000235``), XIC
   (``MS:1000627``) or BPC (``MS:1000628``); anything else is
   :attr:`ChromatogramKind.OTHER`.
+- *Source identity.*  The file is read **once**, into memory, and the bytes are
+  parsed from that buffer.  The SHA-256 the reader reports and the chromatograms
+  it returns therefore describe the same bytes by construction — they cannot
+  come from two different versions of the file.  A file that changes while it is
+  being read (size, mtime or inode moves between two ``fstat`` calls on the open
+  handle, or the buffer length disagrees with the final size) is refused with
+  :class:`~chromamcp.errors.SourceChangedError` rather than recorded against a
+  hash that identifies something else.
 
 Only mzML is accepted.  Every vendor binary format, and every other extension,
 is refused with an explicit conversion instruction (``AGENTS.md`` §4).
@@ -39,10 +47,12 @@ from __future__ import annotations
 import base64
 import binascii
 import gzip
+import hashlib
 import xml.etree.ElementTree as ET
 import zlib
 from dataclasses import dataclass
 from enum import Enum
+from os import fstat
 from pathlib import Path
 
 import numpy as np
@@ -52,13 +62,17 @@ from chromamcp.errors import (
     ChannelResolutionError,
     InaccessiblePathError,
     MalformedFileError,
+    SourceChangedError,
     UnsupportedFormatError,
 )
 
 __all__ = [
     "Chromatogram",
     "ChromatogramKind",
+    "SourceSnapshot",
     "read_chromatograms",
+    "read_chromatograms_with_source",
+    "read_source_bytes",
     "read_tic",
     "read_xic",
 ]
@@ -132,6 +146,70 @@ class Chromatogram:
 # ---------------------------------------------------------------------------
 # Public reader API
 # ---------------------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class SourceSnapshot:
+    """The identity of the bytes a read actually consumed.
+
+    ``sha256`` is computed over the buffer that was parsed, and ``n_bytes`` is
+    that buffer's length, so neither can describe a different version of the
+    file than the one the chromatograms came from.
+    """
+
+    path: str
+    sha256: str
+    n_bytes: int
+
+
+def read_source_bytes(path: str | Path) -> tuple[SourceSnapshot, bytes]:
+    """Read *path* once, returning its identity and the bytes that were read.
+
+    The hash is taken over the buffer in memory, never re-read from the path, so
+    a file replaced between opening and hashing cannot produce a hash for bytes
+    that were never parsed.  A change **during** the read is detected by
+    comparing ``fstat`` on the open handle before and after, and refused.
+    """
+    resolved = _resolve_readable(path)
+    try:
+        with resolved.open("rb") as handle:
+            before = fstat(handle.fileno())
+            data = handle.read()
+            after = fstat(handle.fileno())
+    except OSError as exc:
+        raise InaccessiblePathError(f"Could not read '{resolved}': {exc}") from exc
+
+    identity_before = (before.st_size, before.st_mtime_ns, before.st_ino)
+    identity_after = (after.st_size, after.st_mtime_ns, after.st_ino)
+    if identity_before != identity_after or len(data) != after.st_size:
+        raise SourceChangedError(
+            f"'{resolved}' changed while it was being read, so the bytes parsed "
+            f"are not the bytes its identity describes. No result is issued for "
+            f"a moving input; re-run the request once the file is stable."
+        )
+
+    return (
+        SourceSnapshot(
+            path=str(resolved),
+            sha256=hashlib.sha256(data).hexdigest(),
+            n_bytes=len(data),
+        ),
+        data,
+    )
+
+
+def read_chromatograms_with_source(
+    path: str | Path,
+) -> tuple[SourceSnapshot, tuple[Chromatogram, ...]]:
+    """Read the file once and return its identity **and** its channels.
+
+    This is the entry point for anything that records evidence: the snapshot and
+    the chromatograms come from one buffer, so a stored hash always identifies
+    the file the numbers were measured from.
+    """
+    snapshot, data = read_source_bytes(path)
+    gzipped = snapshot.path.lower().endswith(".gz")
+    return snapshot, _parse_chromatograms(data, label=snapshot.path, gzipped=gzipped)
+
+
 def read_chromatograms(path: str | Path) -> tuple[Chromatogram, ...]:
     """Read every chromatogram channel in the mzML file at *path*.
 
@@ -140,11 +218,18 @@ def read_chromatograms(path: str | Path) -> tuple[Chromatogram, ...]:
     chromatograms are incomplete, raises
     :class:`~chromamcp.errors.MalformedFileError`.
     """
-    resolved = _resolve_readable(path)
-    root = _parse_root(resolved)
+    _snapshot, chromatograms = read_chromatograms_with_source(path)
+    return chromatograms
+
+
+def _parse_chromatograms(
+    data: bytes, *, label: str, gzipped: bool
+) -> tuple[Chromatogram, ...]:
+    """Parse the chromatogram channels out of an already-read buffer."""
+    root = _parse_root_bytes(data, label=label, gzipped=gzipped)
     run = _child(root, "run")
     if run is None:
-        raise MalformedFileError(f"'{resolved}' has no <run> element; not valid mzML.")
+        raise MalformedFileError(f"'{label}' has no <run> element; not valid mzML.")
     chromatogram_list = _child(run, "chromatogramList")
     if chromatogram_list is None:
         return ()
@@ -448,27 +533,24 @@ def _parse_chromatogram(elem: ET.Element) -> Chromatogram:
 # ---------------------------------------------------------------------------
 # Document parsing
 # ---------------------------------------------------------------------------
-def _parse_root(path: Path) -> ET.Element:
+def _parse_root_bytes(data: bytes, *, label: str, gzipped: bool) -> ET.Element:
+    """Parse the document root from a buffer that has already been read."""
     try:
-        if path.name.lower().endswith(".gz"):
-            with gzip.open(path, "rb") as handle:
-                root = ET.parse(handle).getroot()
-        else:
-            root = ET.parse(path).getroot()
+        payload = gzip.decompress(data) if gzipped else data
+    except (gzip.BadGzipFile, EOFError, zlib.error) as exc:
+        raise MalformedFileError(
+            f"'{label}' is named .gz but is not a valid gzip stream."
+        ) from exc
+    try:
+        root = ET.fromstring(payload)
     except ET.ParseError as exc:
         raise MalformedFileError(
-            f"'{path}' is not well-formed XML and cannot be read as mzML."
+            f"'{label}' is not well-formed XML and cannot be read as mzML."
         ) from exc
-    except gzip.BadGzipFile as exc:
-        raise MalformedFileError(
-            f"'{path}' is named .gz but is not a valid gzip stream."
-        ) from exc
-    except OSError as exc:
-        raise InaccessiblePathError(f"Could not read '{path}': {exc}") from exc
 
     if _local(root.tag) != "mzML":
         raise MalformedFileError(
-            f"'{path}' is not an mzML document (root element is "
+            f"'{label}' is not an mzML document (root element is "
             f"'{_local(root.tag)}', expected 'mzML')."
         )
     return root

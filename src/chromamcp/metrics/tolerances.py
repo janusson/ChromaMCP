@@ -13,9 +13,12 @@ is the single source of truth for them: the panel attaches the value to every
 ``tests/test_tolerances.py`` checks it against the register in ``TOLERANCES.md``
 so the shipped number and the recorded derivation cannot drift apart.
 
-``signal_to_noise``'s convention is settled by ``DECISIONS.md`` §1 (``S/N = 2H/h``,
-peak-to-peak over the 5×-half-height-width window), so every tolerance here is the
-derived one.
+``signal_to_noise``'s reading is ``S/N = 2H/h`` with peak-to-peak noise, and its
+window is settled by ``DECISIONS.md`` §9 Q-B: 20× the half-height width, with 5×
+the permitted fallback.  Its tolerance was re-measured at the 20× window for W12
+and did not move: ``h`` is exact arithmetic over the caller's blank, so the only
+estimator in the ratio is the apex height and the S/N residual **is** the height
+residual (``TOLERANCES.md``).
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ TOLERANCE: dict[str, float] = {
     "selectivity": 1.5e-2,
     "signal_to_noise": 1.0e-2,
     "peak_to_valley": 2.0e-2,
-    "peak_area": 2.5e-3,
+    "peak_area": 2.0e-3,
     "peak_height": 1.0e-2,
     "rsd_replicates": 1e-12,
 }

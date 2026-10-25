@@ -11,7 +11,10 @@ from __future__ import annotations
 from chromamcp.io.mzml import (
     Chromatogram,
     ChromatogramKind,
+    SourceSnapshot,
     read_chromatograms,
+    read_chromatograms_with_source,
+    read_source_bytes,
     read_tic,
     read_xic,
 )
@@ -19,7 +22,10 @@ from chromamcp.io.mzml import (
 __all__ = [
     "Chromatogram",
     "ChromatogramKind",
+    "SourceSnapshot",
     "read_chromatograms",
+    "read_chromatograms_with_source",
+    "read_source_bytes",
     "read_tic",
     "read_xic",
 ]

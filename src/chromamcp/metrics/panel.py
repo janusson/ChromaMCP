@@ -6,13 +6,14 @@ Each carries the **formula id** whose row lives in ``SOURCES.md``; a formula id
 with no row is a bug, and ``tests/test_sources_complete.py`` enforces it.
 
 **Provenance of the formulas — read this before citing a number.**  The
-designated source for the panel is USP 〈621〉 Chromatography (harmonised text).
-That primary text was **not consulted** when these functions were written (it is
-paywalled), so every row ships marked ``secondary source — primary text not
-consulted`` and the equations below are the standard published forms, not
-transcriptions from 〈621〉 itself (``AGENTS.md`` §1.2).  They must be checked
-against the primary text before any of them is presented as "the published
-formula".
+designated source for the panel is USP 〈621〉 Chromatography (harmonised text),
+read in its Stage 4 harmonisation document (official 1 December 2022), together
+with JP XVIII *General Tests* 2.01.  The 〈621〉 rows in ``SOURCES.md`` are
+transcribed from those two documents and say so in their ``Status`` column
+(``AGENTS.md`` §1.2); later revisions of the system-sensitivity and peak-symmetry
+subsections were not read, and the register names the revision it is anchored to.
+Where this panel chooses between conventions the field also uses, the docstring
+names the one it rejects.
 
 Uniform conventions, named here once:
 
@@ -102,13 +103,16 @@ def resolution(
 ) -> MetricResult:
     """Resolution ``Rs`` between two peaks, from half-height widths.
 
-    ``Rs = 2 (tR2 − tR1) / (w½1 + w½2)``, with the peaks given in elution order
-    (``tR1 < tR2``).
+    ``Rs = 1.18 (tR2 − tR1) / (w½1 + w½2)``, with the peaks given in elution
+    order (``tR1 < tR2``) — the harmonised half-height form as written in
+    USP 〈621〉 Chromatography (Stage 4, 1 Dec 2022) and JP XVIII §2.01.
 
-    Conventions.  Widths are at **half height**, the form on which US, EP and JP
-    agree.  It rejects the base-width form ``Rs = 2 (tR2 − tR1) / (W1 + W2)``,
-    whose ``W`` are widths at the baseline between the tangents and which gives a
-    larger number from the same trace.
+    Conventions.  Widths are at **half height**, and the coefficient belongs to
+    that pair: ``1.18`` with half-height widths.  It rejects the base-width form
+    ``Rs = 2 (tR2 − tR1) / (W1 + W2)``, whose ``W`` are widths at the baseline
+    between the tangents — ``2`` is the right constant **only** for those widths.
+    Pairing ``2`` with half-height widths, which this function did until W12,
+    reported 1.695× the harmonised value from the same trace.
     """
     _require_positive("first_apex_time", first_apex_time)
     _require_positive("first_half_height_width", first_half_height_width)
@@ -119,7 +123,7 @@ def resolution(
             "peaks must be given in elution order (second_apex_time > first_apex_time)."
         )
     value = (
-        2.0
+        1.18
         * (second_apex_time - first_apex_time)
         / (first_half_height_width + second_half_height_width)
     )
@@ -226,18 +230,20 @@ def signal_to_noise(
     ``S/N = 2 H / h``, with ``H`` the peak height above the baseline and ``h``
     the **peak-to-peak** noise of a blank region the caller supplies.
 
-    Conventions — this is the panel's designated trap; its convention is now
-    settled (``DECISIONS.md`` §1).  ``SOURCES.md`` records the harmonised noise
-    range as tied to the peak's half-height width (a window of five times that
-    width, from a blank at the expected retention time); the caller selects that
-    window and passes the blank samples here.  This function fixes the statistic
-    as peak-to-peak and the reading as ``2H/h``.  It **rejects**, and does not
-    mix with, the RMS (``6σ``) form and the plain ``H/h`` form, which give
-    different numbers from the same blank — mixing them is the failure the
-    convention must prevent.  A vendor 20×-window variant is also recorded in
-    ``SOURCES.md`` and is not used here.  ``DECISIONS.md`` §1 keeps this reading
-    as shipped, so the ``SOURCES.md`` convention row and the ``TOLERANCES.md``
-    ``S/N`` row stand as derived.
+    Conventions — this is the panel's designated trap, and its noise range has a
+    hierarchy the register states in the sources' own order (``DECISIONS.md`` §9,
+    Q-B).  USP 〈621〉 takes ``h`` "observed over a distance equal to 20 times the
+    width at half-height" and permits "at least 5 times the width at half-height"
+    only where a 20× baseline "is not obtainable because of peaks due to the
+    solvents"; JP XVIII §2.01 states the 20× range as well.  So **20× is the
+    primary range and 5× the permitted fallback**, and the fallback is a property
+    of the trace, not a licence to prefer the shorter window.
+
+    The window is the **caller's**: this function takes the blank samples the
+    caller has already sliced and fixes only the statistic (peak-to-peak) and the
+    reading (``2H/h``).  It **rejects**, and does not mix with, the RMS (``6σ``)
+    form and the plain ``H/h`` form, which give different numbers from the same
+    blank — mixing them is the failure the convention must prevent.
     """
     _require_finite("signal_height", signal_height)
     blank = np.asarray(blank_intensity, dtype=np.float64)

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
+import os
 import zlib
 from pathlib import Path
 
@@ -22,11 +24,14 @@ from chromamcp.errors import (
     ChannelResolutionError,
     InaccessiblePathError,
     MalformedFileError,
+    SourceChangedError,
     UnsupportedFormatError,
 )
 from chromamcp.io import (
     ChromatogramKind,
+    mzml,
     read_chromatograms,
+    read_chromatograms_with_source,
     read_tic,
     read_xic,
 )
@@ -488,3 +493,79 @@ def test_ambiguous_xic_requires_id(tmp_path: Path) -> None:
     )
     with pytest.raises(ChannelResolutionError):
         read_xic(_write(tmp_path, doc))
+
+
+# --- source identity (F2) ---------------------------------------------------
+def test_the_snapshot_hash_describes_the_parsed_bytes(tmp_path: Path) -> None:
+    path = _write(tmp_path, _tic_document([0.0, 1.0], [10.0, 20.0]))
+    snapshot, chroms = read_chromatograms_with_source(path)
+
+    raw = path.read_bytes()
+    assert snapshot.sha256 == hashlib.sha256(raw).hexdigest()
+    assert snapshot.n_bytes == len(raw)
+    assert snapshot.path == str(path)
+    assert chroms[0].n_points == 2
+
+
+def test_a_replaced_file_cannot_yield_the_other_version(tmp_path: Path) -> None:
+    """One call's hash identifies that call's numbers — the defect F2 reported.
+
+    The review reproduced a measurement of 10.0 returned with the hash of a file
+    whose peak was 90.0.  Reading the path twice now ties each result to the
+    bytes it was parsed from; the assertion is on both directions, so a stale or
+    future hash fails it either way.
+    """
+    path = _write(tmp_path, _tic_document([0.0, 1.0], [10.0, 10.0]))
+    first, first_chroms = read_chromatograms_with_source(path)
+    first_bytes = path.read_bytes()
+    assert float(first_chroms[0].intensity.max()) == 10.0
+
+    path.write_text(_tic_document([0.0, 1.0], [90.0, 90.0]), encoding="utf-8")
+    second, second_chroms = read_chromatograms_with_source(path)
+
+    assert float(second_chroms[0].intensity.max()) == 90.0
+    assert second.sha256 != first.sha256
+    assert first.sha256 == hashlib.sha256(first_bytes).hexdigest()
+    assert second.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_a_file_changed_while_being_read_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A moving input issues no evidence rather than a guessed identity."""
+    path = _write(tmp_path, _tic_document([0.0, 1.0], [10.0, 20.0]))
+    real_fstat = os.fstat
+    calls = {"n": 0}
+
+    class _Stat:
+        def __init__(self, size: int, mtime_ns: int, inode: int) -> None:
+            self.st_size = size
+            self.st_mtime_ns = mtime_ns
+            self.st_ino = inode
+
+    def moving_fstat(fd: int) -> _Stat:
+        result = real_fstat(fd)
+        calls["n"] += 1
+        # The second look sees a later mtime: the file moved under the read.
+        return _Stat(
+            result.st_size,
+            result.st_mtime_ns + (1 if calls["n"] == 2 else 0),
+            result.st_ino,
+        )
+
+    monkeypatch.setattr(mzml, "fstat", moving_fstat)
+    with pytest.raises(SourceChangedError):
+        read_chromatograms_with_source(path)
+    assert calls["n"] == 2
+
+
+def test_a_gzipped_file_is_hashed_as_stored(tmp_path: Path) -> None:
+    """The hash is of the file's own bytes, not of the decompressed document."""
+    text = _tic_document([0.0, 1.0], [10.0, 20.0])
+    path = tmp_path / "sample.mzML.gz"
+    path.write_bytes(gzip.compress(text.encode("utf-8")))
+
+    snapshot, chroms = read_chromatograms_with_source(path)
+
+    assert snapshot.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert chroms[0].n_points == 2

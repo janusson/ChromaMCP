@@ -48,7 +48,7 @@ from chromamcp.geometry import (
     half_height_width,
     resolve_baseline,
 )
-from chromamcp.io.mzml import Chromatogram, read_chromatograms
+from chromamcp.io.mzml import Chromatogram, read_chromatograms_with_source
 from chromamcp.metrics import (
     MetricResult,
     capacity_factor,
@@ -60,7 +60,7 @@ from chromamcp.metrics import (
     selectivity,
     symmetry_factor,
 )
-from chromamcp.provenance import TOLERANCE_BASIS, file_sha256, library_versions
+from chromamcp.provenance import TOLERANCE_BASIS, library_versions
 from chromamcp.security import FilesystemPolicy, policy_from_env, resolve_path
 from chromamcp.server.store import ReferenceStore
 
@@ -251,9 +251,9 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
     def load_chromatogram(path: str) -> dict[str, object]:
         try:
             allowed = resolve_path(path, policy=policy)
-            chromatograms = read_chromatograms(allowed)
-            resolved = str(allowed)
-            digest = file_sha256(allowed)
+            snapshot, chromatograms = read_chromatograms_with_source(allowed)
+            resolved = snapshot.path
+            digest = snapshot.sha256
         except ChromamcpError as exc:
             raise ToolError(str(exc)) from exc
         reference = store.put(

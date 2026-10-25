@@ -46,7 +46,25 @@ def test_resolution_value() -> None:
         second_apex_time=1.5,
         second_half_height_width=0.1,
     )
-    assert result.value == pytest.approx(5.0)  # 2 * 0.5 / 0.2
+    assert result.value == pytest.approx(2.95)  # 1.18 * 0.5 / 0.2
+
+
+def test_resolution_uses_the_harmonised_coefficient() -> None:
+    """``Rs = 1.18 (tR2 − tR1) / (w½1 + w½2)``, worked by hand from the citation.
+
+    The expected value is arithmetic on the cited equation — not a call to this
+    package — so it cannot inherit the implementation's constant.  A pair the
+    harmonised definition puts at ``Rs = 1.18`` is the region where labs set
+    ``Rs > 1.5``; reporting ``2.0`` there (the base-width constant applied to
+    half-height widths) is 1.695× high and not comparable with vendor software.
+    """
+    result = resolution(
+        first_apex_time=1.0,
+        first_half_height_width=0.5,
+        second_apex_time=2.0,
+        second_half_height_width=0.5,
+    )
+    assert result.value == pytest.approx(1.18)
 
 
 def test_symmetry_factor_is_one_for_a_symmetric_peak() -> None:

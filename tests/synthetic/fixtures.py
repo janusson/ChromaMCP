@@ -131,10 +131,14 @@ def overlapped_midpoint() -> float:
 def noise_region(
     half_height_width: float, step: float, *, seed: int = 990001
 ) -> NDArray[np.float64]:
-    """A blank region five times a peak's half-height width, at the working rate.
+    """A blank region **twenty times** a peak's half-height width.
 
-    This is the noise window ``SOURCES.md`` records for ``S/N`` — tied to the
-    peak's half-height width — realised as pure noise on the same grid.
+    This is the noise window the pharmacopoeial text names for ``S/N``: USP 〈621〉
+    takes the noise over a distance equal to 20× the width at half-height, and
+    permits 5× only where a 20× baseline is unobtainable (solvent peaks,
+    gradient); JP XVIII §2.01 states the 20× range too.  The fixture uses the
+    primary range; 5× is the documented fallback, not a shorter default
+    (``DECISIONS.md`` §9, Q-B).  Realised as pure noise on the same grid.
     """
-    count = max(2, round(5.0 * half_height_width / step))
+    count = max(2, round(20.0 * half_height_width / step))
     return add_noise(np.zeros(count), sd=NOISE_SD, seed=seed)
