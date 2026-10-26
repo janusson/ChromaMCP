@@ -198,6 +198,8 @@ def _measure(
     The row carries everything a reader needs to redo the measurement: the
     window in indices and in retention time, the baseline rule, the apex, the
     widths, and the area as a metric row with its formula id and tolerance.
+    Apex selection and interpolation use intensity above the same anchored line
+    as height, widths and area; the raw-intensity maximum is not used.
     """
     if not 0 <= left < right < int(time.size):
         raise ToolError(
@@ -207,7 +209,9 @@ def _measure(
     baseline: Baseline = resolve_baseline(
         BaselineRule.LINEAR, time, intensity, left_index=left, right_index=right
     )
-    apex = find_apex(time, intensity, left_index=left, right_index=right)
+    apex = find_apex(
+        time, intensity, baseline=baseline, left_index=left, right_index=right
+    )
     half = half_height_width(time, intensity, baseline=baseline, apex=apex)
     five = five_percent_width(time, intensity, baseline=baseline, apex=apex)
     area = peak_area(
@@ -226,6 +230,18 @@ def _measure(
             "t_right_min": float(time[right]),
         },
         "baseline_rule": BaselineRule.LINEAR.value,
+        "baseline_anchors": {
+            "left": {
+                "index": left,
+                "time_min": float(time[left]),
+                "intensity": float(intensity[left]),
+            },
+            "right": {
+                "index": right,
+                "time_min": float(time[right]),
+                "intensity": float(intensity[right]),
+            },
+        },
         "apex": {
             "index": apex.index,
             "time_min": apex.time,

@@ -120,10 +120,16 @@ def find_apex(
     time: NDArray[np.float64],
     intensity: NDArray[np.float64],
     *,
+    baseline: Baseline | None = None,
     left_index: int = 0,
     right_index: int | None = None,
 ) -> Apex:
     """Return the apex of the peak inside ``[left_index, right_index]``.
+
+    With an explicit baseline, selection and interpolation use intensity minus
+    that line, rejecting the raw-intensity maximum convention. The returned
+    intensity adds the line back at the refined time. Omitting the baseline
+    retains the raw-intensity convention for callers measuring raw maxima.
 
     The maximum is refined by three-point parabolic interpolation when it is an
     interior sample and the three points are concave; otherwise the discrete
@@ -136,23 +142,28 @@ def find_apex(
         raise PeakGeometryError(
             "the apex window must satisfy 0 <= left_index <= right_index < n."
         )
-    section = intensity[left_index : right + 1]
+    adjusted = intensity if baseline is None else intensity - baseline.values(time)
+    section = adjusted[left_index : right + 1]
     index = left_index + int(np.argmax(section))
 
     if left_index < index < right:
         vertex = _parabolic_vertex(
             float(time[index - 1]),
-            float(intensity[index - 1]),
+            float(adjusted[index - 1]),
             float(time[index]),
-            float(intensity[index]),
+            float(adjusted[index]),
             float(time[index + 1]),
-            float(intensity[index + 1]),
+            float(adjusted[index + 1]),
         )
         if vertex is not None and float(time[index - 1]) < vertex[0] < float(
             time[index + 1]
         ):
             return Apex(
-                index=index, time=vertex[0], intensity=vertex[1], interpolated=True
+                index=index,
+                time=vertex[0],
+                intensity=vertex[1]
+                + (0.0 if baseline is None else baseline.value(vertex[0])),
+                interpolated=True,
             )
 
     return Apex(
@@ -176,12 +187,13 @@ def width_at_height(
     *fraction* is a number in ``(0, 1)``: ``0.5`` is the half-height width, and
     ``0.05`` the 5 %-height width the symmetry factor is defined on.  The
     baseline is required — the width is never measured against zero by default.
+    If no apex is supplied, selection uses this same baseline-adjusted trace.
     """
     _validate_trace(time, intensity)
     if not 0.0 < fraction < 1.0:
         raise PeakGeometryError("fraction must be strictly between 0 and 1.")
     if apex is None:
-        apex = find_apex(time, intensity)
+        apex = find_apex(time, intensity, baseline=baseline)
 
     above = intensity - baseline.values(time)
     height = apex.intensity - baseline.value(apex.time)

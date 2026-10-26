@@ -44,7 +44,7 @@ Ministry of Health, Labour and Welfare PDF (5 930 309 bytes, sha256
 | `rsd_replicates` | `%RSD` | `100 / x̄ · √(Σ(xi − x̄)² / (n − 1))` | JP `RSD = 100/x̄ · √(Σ(xi − x̄)²/(n − 1))` | transcribed |
 | `peak_area` | area | trapezoid of (intensity − baseline) over the window | *n/a — model-dependent; the baseline rule must cite whatever it follows* | `ours` — `geometry/baseline.py` (`LINEAR`, `VALLEY_DROP`; `TANGENT_SKIM` refused in M1) |
 | `peak_height` | height | `y_apex − baseline(t_apex)` | *n/a — model-dependent* | `ours` — same baseline rule |
-| — | retention time `tR` | apex time (W2 three-point parabolic interpolation) | *n/a — a measurement, not a formula* | `ours` — `geometry/peaks.py` |
+| — | retention time `tR` | apex time (three-point parabolic interpolation; window measurements select and interpolate intensity above their explicit baseline, then restore the line for raw apex intensity) | *n/a — a measurement, not a formula* | `ours` — `geometry/peaks.py` |
 | — | width at half height `w½` | width at ½ of peak height above the baseline (W2, first crossing, linear interpolation) | *n/a — a measurement; the interpolation rule is ours* | `ours` — `geometry/peaks.py` |
 
 **Anchors for the surrounding vocabulary:** USP 〈1058〉 (analytical instrument qualification) and
