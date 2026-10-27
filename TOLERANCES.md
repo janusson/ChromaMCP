@@ -1,4 +1,4 @@
-# TOLERANCES — how each metric's acceptance tolerance was derived
+# TOLERANCES — synthetic-fixture estimator disagreement evidence
 
 A tolerance is a claim. This file records the evidence for every one of them, because a tolerance
 chosen by taste silently encodes the estimator's bias as truth: if the fixtures assert that a
@@ -6,8 +6,10 @@ Gaussian whose generating σ implies `N = 10 000` yields a reported `N = 10 000`
 implementation passes its own test and the number is worthless.
 
 **Status of this file:** the tolerance register was filled in during W4 (2026-10-11) and two rows were
-re-derived in W12 (2026-10-25). Every number below is **measured, not chosen** (`AGENTS.md` §1.3), and
-the derivation that produced it is named in the row.
+re-derived in W12 (2026-10-25). The historical residuals and margins below are retained. Nine reference bounds
+come from measured residuals with a stated margin; the `%RSD` `1e-12` is a
+historical numerical floor, not a derived bound (`AGENTS.md` §1.3). It remains
+visible as historical evidence and is never applied to a caller's measurement.
 
 **What these numbers are, and are not.** Each tolerance bounds **estimator disagreement** between the
 package's working-rate route and an independent route on the fixture domain below — two sampling
@@ -27,8 +29,8 @@ studied, and a result outside it is `not-evaluated` rather than inside a bound n
 3. Measure how the estimator converges as the sampling interval shrinks. The residual at the working
    sampling rate **is** the discretisation error.
 4. Set the tolerance from that measured error plus a stated margin. Record both numbers here.
-5. Repeat on a noisy fixture: the tolerance reported to a user must be honest about noise, so the
-   noiseless number is not the one that ships.
+5. Repeat on a noisy fixture: a reference bound must state the noise studied, so the
+   noiseless residual alone does not set the reference bound.
 
 ## How the numbers below were obtained
 
@@ -37,12 +39,14 @@ working-rate estimator (W2/W3), and an **independent route** — a dense trace, 
 bisection, an apex fitted by a different derivation — combined with the definition's own equation.
 Two numbers are recorded per metric: the **discretisation error** (noiseless; the larger of the two
 working rates) and the **noise residual** (the worst over 8 seeded noise realisations at both rates,
-with Gaussian noise at 0.2 % of the peak height). The shipped tolerance is the noise residual
-`× 2` (the margin), rounded up — honest about a noisy single scan, which is what actually ships.
+with Gaussian noise at 0.2 % of the peak height). For the nine trace metrics the fixture reference bound is the noise residual
+`× 2` (the margin), rounded up. The `%RSD` historical floor is an exception,
+explicitly recorded below. These reference bounds describe the experiment;
+applicability to a production measurement remains `not-evaluated`.
 
 ## Tolerance register
 
-| Metric id | Metric | Independent expectation route | Discretisation error (noiseless) | Noise residual (8 seeds × 2 rates) | Margin | Tolerance shipped |
+| Metric id | Metric | Independent expectation route | Discretisation error (noiseless) | Noise residual (8 seeds × 2 rates) | Margin | Fixture reference bound |
 |---|---|---|---|---|---|---|
 | `plate_number` | `N` | dense trace · bisection half-height widths · `5.54 (tR/w½)²` | 1.1e-4 | 9.4e-3 | ×2 | 2.0e-2 |
 | `resolution` | `Rs` | dense trace · bisection widths · `1.18 (tR2−tR1) / (w½1 + w½2)` | 5.7e-5 | 2.4e-2 | ×2 | 5.0e-2 |
@@ -55,13 +59,69 @@ with Gaussian noise at 0.2 % of the peak height). The shipped tolerance is the n
 | `peak_height` | `height` | dense apex height above the baseline | < 1e-12 | 3.3e-3 | ×2 | 1.0e-2 |
 | `rsd_replicates` | `%RSD` | exact arithmetic (sample sd, n − 1) | 0 (exact) | 0 (exact) | — | 1e-12 |
 
-The **Metric id** column is the id the code emits, so it matches `SOURCES.md` and `FORMULA_IDS`. The
-**Tolerance shipped** column is the value the panel attaches to every result
-(`src/chromamcp/metrics/tolerances.py`); `tests/test_tolerances.py` asserts the column equals that
-mapping, so the shipped number and the recorded derivation cannot drift apart. Every shipped
-tolerance is on the **relative** basis — a fraction of the independently expected value — and the
-provenance record states that basis (`tolerance_basis`), so a bare number cannot be read as an
-absolute bound in the metric's own unit.
+The **Metric id** column is the id the code emits, so it matches `SOURCES.md`
+and `FORMULA_IDS`. The **Fixture reference bound** column equals the historical
+`TOLERANCE` mapping (`src/chromamcp/metrics/tolerances.py`), checked by
+`tests/test_tolerances.py`. Production responses expose it only inside
+`estimator_fixture_tolerance`, with `reference_bound`, `basis: relative`,
+`domain_id: synthetic-w4-w12-v1`, `applicability: not-evaluated` and
+`applied_bound: null`. The pure result exposes the same metadata property;
+`tolerance` remains an internal compatibility field for panel construction.
+Custom constructor bounds or unregistered metric ids receive no fixture metadata;
+they cannot inherit the domain or derivation claim from a supplied number.
+The criteria `verdict` is a separate field and measurement uncertainty is
+separately `not-evaluated`. None of these reference numbers is a laboratory
+acceptance limit or a measurement uncertainty.
+
+## A4 applicability and zero policy (implementer decision, 2026-10-26)
+
+The conservative implementation makes no automatic inference that a caller's
+trace belongs to the fixture domain. Sampling interval or metric value alone
+cannot establish its peak model, noise or detector behaviour. Every production
+result therefore carries applicability `not-evaluated` and no applied bound,
+including a result numerically equal to zero or one from a synthetic caller.
+The fixture tests compare only fixtures they construct explicitly.
+
+Relative disagreement is `abs(observed - expected) / abs(expected)` for nonzero
+independent expected values. It is undefined at expected zero, even when the
+observed value is also zero. No near-zero threshold or absolute floor is
+introduced: there is no measured evidence here from which to derive one.
+A small nonzero expected value still uses that relative expression only within
+the recorded fixture experiment; the code makes no applicability inference from
+it. The output's `zero_expected_policy` records this distinction.
+
+The `%RSD` residual is zero on the fixed positive-response vector, with no margin
+in the historical register. Multiplication of zero by a margin cannot derive
+`1e-12`. Its metadata says `historical-floor-not-derived`; that value is
+retained for historical traceability and is not an applied relative bound on
+equal replicates (zero `%RSD`) or on any other production measurement.
+
+## Complete bounded replay (A4)
+
+`tests/synthetic/derive_tolerances.py` now replays **all eight seeds at both
+working rates**, plus both noiseless rates, serially. It measures the dense
+geometry independently and applies the registered equations directly; expected
+values do not call production panel functions. Area uses an independent
+`math.fsum` trapezoid reduction and `%RSD` uses explicit sample variance arithmetic.
+S/N shares the supplied blank between routes; it measures apex-estimator
+agreement, not blank adequacy. The blank uses fixed seed 990001 at 20× width.
+
+Reproduce the checked Markdown evidence (numbers only, no trace files):
+
+```sh
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  uv run python -m tests.synthetic.derive_tolerances
+```
+
+`tests/synthetic/tolerance-evidence.md` records actual maxima, twice each noisy
+maximum, and the worst rate and seed, beside the retained historical reference
+bound. The gate replays and compares the evidence artifact and checks each of
+the 16 noisy cases per metric against its reference; for the nine trace metrics
+it also checks the stated ×2 margin fits that reference. The `%RSD` vector has
+no rate/noise-dependent estimator and is repeated only for a uniform replay
+record. Its historical floor is marked rather than re-derived. The replay
+reproduces the historical rounded residuals; it does not extend the studied
+domain or establish production uncertainty.
 
 Notes.  `A` uses the EMG fixture because a Gaussian cannot exercise tailing.  `k′` and `α` inherit any
 error in the supplied `t0`, which is reported separately.  `Rs`'s residual is unchanged by the W12
@@ -100,5 +160,7 @@ than restated as a system.
 ## Sampling rates used
 
 Coarse `Δt = 0.002 min` and fine `Δt = 0.001 min`; the independent route runs at `Δt = 1e-5 min`.
-The tolerance holds at **both** working rates, as the gate requires; the residual is larger at the
-coarser one.
+The fixture reference bounds hold at **both** working rates, as the gate
+requires. The worst seed and rate vary by metric; the checked evidence records
+them (symmetry factor and peak-to-valley have their worst noisy residual at the
+finer rate).

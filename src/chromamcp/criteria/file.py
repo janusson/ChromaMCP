@@ -22,12 +22,14 @@ is read as ``True``.  The reader detects that and asks for the key to be quoted
 
 The file is **YAML** (the syntax ``M1-BRIEF.md`` §6 shows).  That is the one new
 dependency W6 adds (``pyyaml``; ``AGENTS.md`` §5 records the reason), and it is
-read only through :func:`yaml.safe_load`, which constructs no arbitrary objects.
+read through a local :class:`yaml.SafeLoader` subclass, which constructs no
+arbitrary objects and refuses duplicate keys, including merged overrides.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import math
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,7 +68,7 @@ _CRITERION_KEYS = frozenset({"metric", "between", "operator", "value", "n", "on"
 
 @dataclass(frozen=True, slots=True)
 class Criterion:
-    """One acceptance limit."""
+    """One limit: distinct pair names; ``n`` only for replicate-based metrics."""
 
     metric: str
     operator: str
@@ -108,10 +110,35 @@ def load_criteria(path: str | Path) -> CriteriaFile:
     return parse_criteria(text)
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML construction with no silent mapping-key replacement."""
+
+    def construct_mapping(
+        self, node: yaml.nodes.MappingNode, deep: bool = False
+    ) -> dict[Hashable, object]:
+        self.flatten_mapping(node)
+        keys: set[object] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                duplicate = key in keys
+                keys.add(key)
+            except TypeError as exc:
+                raise CriteriaError(
+                    "criteria mapping keys must be scalar values."
+                ) from exc
+            if duplicate:
+                raise CriteriaError(
+                    f"duplicate mapping key {key!r} at line {key_node.start_mark.line + 1}; "
+                    "state each key once, without merged overrides."
+                )
+        return super().construct_mapping(node, deep=deep)
+
+
 def parse_criteria(text: str) -> CriteriaFile:
     """Parse and validate criteria *text*, refusing anything outside the §6 shape."""
     try:
-        raw = yaml.safe_load(text)
+        raw = yaml.load(text, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as exc:
         raise CriteriaError(f"the criteria file is not valid YAML: {exc}") from exc
     if not isinstance(raw, Mapping):
@@ -190,10 +217,21 @@ def _criterion(value: object, index: int) -> Criterion:
     if isinstance(number, bool) or not isinstance(number, (int, float)):
         raise CriteriaError(f"{where}: 'value' must be a number; got {number!r}.")
 
+    try:
+        finite_number = float(number)
+    except OverflowError as exc:
+        raise CriteriaError(f"{where}: 'value' must be finite in float64.") from exc
+    if not math.isfinite(finite_number):
+        raise CriteriaError(f"{where}: 'value' must be finite; got {number!r}.")
+
+    if "n" in value and metric not in REPLICATE_METRICS:
+        raise CriteriaError(
+            f"{where}: '{metric}' is not replicate-based, so 'n' is not allowed."
+        )
     return Criterion(
         metric=metric,
         operator=str(operator),
-        value=float(number),
+        value=finite_number,
         between=_between(value.get("between"), metric, where),
         n=_replicate_count(value.get("n"), metric, where),
         on=_roles(value.get("on"), where),
@@ -211,6 +249,8 @@ def _between(value: object, metric: str, where: str) -> tuple[str, str] | None:
                 f"{where}: '{metric}' is a pairwise metric and needs 'between' as "
                 f"two non-empty peak names."
             )
+        if value[0] == value[1]:
+            raise CriteriaError(f"{where}: 'between' needs two distinct peak names.")
         return (value[0], value[1])
     if value is not None:
         raise CriteriaError(

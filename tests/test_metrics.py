@@ -106,7 +106,7 @@ def test_peak_to_valley_value() -> None:
 def test_peak_height_value_and_unit() -> None:
     result = peak_height(apex_intensity=100.0, baseline_at_apex=10.0)
     assert result.value == pytest.approx(90.0)
-    assert result.unit == "counts"
+    assert result.unit == "unknown"
 
 
 def test_peak_area_trapezoid_over_baseline() -> None:
@@ -120,7 +120,7 @@ def test_peak_area_trapezoid_over_baseline() -> None:
         right_index=2,
     )
     assert result.value == pytest.approx(2.0)  # two triangles of area 1
-    assert result.unit == "counts·min"
+    assert result.unit == "unknown·min"
 
 
 def test_rsd_replicates_sample_standard_deviation() -> None:
@@ -233,3 +233,20 @@ def test_rsd_replicates_needs_at_least_two_values() -> None:
 def test_rsd_replicates_rejects_a_nan() -> None:
     with pytest.raises(MetricInputError):
         rsd_replicates([1.0, float("nan")])
+
+
+@pytest.mark.parametrize("unit", ["absorbance unit", "CUSTOM:123", "counts"])
+def test_height_and_area_use_explicit_intensity_axis_unit(unit: str) -> None:
+    height = peak_height(apex_intensity=3.0, baseline_at_apex=1.0, intensity_unit=unit)
+    area = peak_area(
+        np.array([0.0, 1.0, 2.0]),
+        np.array([1.0, 3.0, 1.0]),
+        baseline=Baseline.constant(1.0),
+        left_index=0,
+        right_index=2,
+        intensity_unit=unit,
+    )
+    assert height.value == 2.0
+    assert area.value == 2.0
+    assert height.unit == unit
+    assert area.unit == f"{unit}·min"

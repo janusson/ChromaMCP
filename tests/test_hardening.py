@@ -38,9 +38,7 @@ _RECORD_FIELDS = (
     "metrics",
     "timestamp_utc",
     "timestamp_note",
-    # Not a §4 field: the basis every tolerance is stated on, so a bare number in
-    # the record cannot be read as an absolute bound (the W7.2 addition).
-    "tolerance_basis",
+    "measurement_uncertainty",
 )
 
 
@@ -120,6 +118,6 @@ def test_provenance_record_covers_the_required_fields(tmp_path: Path) -> None:
         "value",
         "unit",
         "formula_id",
-        "tolerance",
+        "estimator_fixture_tolerance",
         "verdict",
     } <= set(data["metrics"][0])

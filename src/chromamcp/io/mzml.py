@@ -15,9 +15,14 @@ arrays), and parsing it here keeps the runtime surface to ``numpy`` alone
 the format admits more than one reading, this reader follows these and refuses
 rather than guessing:
 
-- *Time unit.*  A chromatogram time array (``MS:1000595``) is defined **in
-  minutes**; retention time is read in minutes and never silently converted.
-  An array that names a different unit is refused.
+- *Time unit.*  The explicit ``unitAccession`` on ``MS:1000595`` must name
+  seconds or minutes. Seconds are multiplied by ``1/60`` to obtain minutes;
+  original values, unit metadata and the factor are retained. Missing or other
+  units are refused, including a unit name without an accession. See
+  ``docs/axis-units.md`` for the source rules.
+- *Intensity unit.*  The source accession, name and CV reference are retained
+  as opaque metadata; no intensity conversion or inferred detector unit is used.
+  A missing unit is reported as ``unknown``.
 - *Missing values.*  A missing intensity is carried as ``NaN``, never ``0`` — a
   zero-filled gap is indistinguishable from a measured zero (``AGENTS.md`` §1.6).
 - *Binary precision.*  Taken from the array's ``MS:1000521`` (32-bit) or
@@ -85,14 +90,15 @@ __all__ = [
 _ACC_TIC = "MS:1000235"  # total ion current chromatogram
 _ACC_XIC = "MS:1000627"  # selected ion current chromatogram
 _ACC_BPC = "MS:1000628"  # base peak chromatogram
-_ACC_TIME_ARRAY = "MS:1000595"  # time array (minutes)
+_ACC_TIME_ARRAY = "MS:1000595"  # time array
 _ACC_INTENSITY_ARRAY = "MS:1000515"  # intensity array
 _ACC_MZ_ARRAY = "MS:1000514"  # m/z array
 _ACC_32BIT_FLOAT = "MS:1000521"  # 32-bit float
 _ACC_64BIT_FLOAT = "MS:1000523"  # 64-bit float
 _ACC_ZLIB = "MS:1000574"  # zlib compression
 _ACC_SELECTED_ION_MZ = "MS:1000744"  # selected ion m/z
-_ACC_UNIT_MINUTE = "UO:0000031"  # minute (time-array unit)
+_ACC_UNIT_MINUTE = "UO:0000031"  # minute
+_ACC_UNIT_SECOND = "UO:0000010"  # second
 _NUMPRESS = frozenset({"MS:1002312", "MS:1002313", "MS:1002314"})
 
 #: Formats the reader recognises and refuses, with a human label for each, so
@@ -126,16 +132,32 @@ class Chromatogram:
     parsed chromatogram can be handed to several consumers without any of them
     being able to alter what the others see.
 
-    ``time`` is in **minutes** (the mzML time-array convention, ``MS:1000595``)
-    and ``intensity`` is in the file's own intensity unit (typically detector
-    counts).  The two arrays are the same length and index-aligned.
+    ``time`` is normalized to minutes. ``source_time`` retains the decoded
+    source values, and multiplication by ``time_conversion_factor`` produces
+    ``time``. Source unit fields preserve the XML metadata without changing it.
+    Intensity is unchanged and its unit is opaque source metadata, or unknown;
+    this object makes no claim that a supplied intensity unit is correct.
+    All arrays are the same length and index-aligned.
     """
 
     id: str
     kind: ChromatogramKind
     time: NDArray[np.float64]
     intensity: NDArray[np.float64]
+    source_time: NDArray[np.float64]
+    source_time_unit_accession: str
+    source_time_unit_name: str | None
+    source_time_unit_cv_ref: str | None
+    time_conversion_factor: float
+    intensity_unit_accession: str | None
+    intensity_unit_name: str | None
+    intensity_unit_cv_ref: str | None
     target_mz: float | None = None
+
+    @property
+    def intensity_unit(self) -> str:
+        """Source unit label, then accession, or unknown; no unit is inferred."""
+        return self.intensity_unit_name or self.intensity_unit_accession or "unknown"
 
     @property
     def n_points(self) -> int:
@@ -409,11 +431,31 @@ def _array_type(accessions: set[str]) -> str | None:
     return None
 
 
-def _time_unit_accession(elem: ET.Element) -> str | None:
+def _axis_unit(
+    elem: ET.Element, array_accession: str
+) -> tuple[str | None, str | None, str | None]:
+    """Retain the source unit fields on the named array CV term."""
     for child in elem:
-        if _local(child.tag) == "cvParam" and child.get("accession") == _ACC_TIME_ARRAY:
-            return child.get("unitAccession")
-    return None
+        if _local(child.tag) == "cvParam" and child.get("accession") == array_accession:
+            return (
+                child.get("unitAccession"),
+                child.get("unitName"),
+                child.get("unitCvRef"),
+            )
+    return None, None, None
+
+
+def _time_conversion_factor(accession: str | None) -> float:
+    """Return the explicit source-to-minute factor; never infer a missing unit."""
+    if accession == _ACC_UNIT_MINUTE:
+        return 1.0
+    if accession == _ACC_UNIT_SECOND:
+        return 1.0 / 60.0
+    raise UnsupportedFormatError(
+        f"Chromatogram time array unit {accession!r} is missing or unsupported. "
+        f"Supply an explicit second ('{_ACC_UNIT_SECOND}') or minute "
+        f"('{_ACC_UNIT_MINUTE}') unitAccession; no time unit is inferred."
+    )
 
 
 def _decode_binary_data_array(
@@ -423,7 +465,8 @@ def _decode_binary_data_array(
 
     Returns ``(array_type, values)`` where *array_type* is ``"time"``,
     ``"intensity"``, ``"mz"`` or ``None``.  Refuses MS-Numpress, unmet precision
-    and a non-minute time unit rather than guessing (see the module docstring).
+    rather than guessing (see the module docstring). Unit handling occurs in
+    the chromatogram parser, retaining the original values before conversion.
     """
     accessions = _accessions(elem)
     if accessions & _NUMPRESS:
@@ -433,14 +476,6 @@ def _decode_binary_data_array(
             "default) and retry."
         )
     array_type = _array_type(accessions)
-    if array_type == "time":
-        unit = _time_unit_accession(elem)
-        if unit is not None and unit != _ACC_UNIT_MINUTE:
-            raise UnsupportedFormatError(
-                f"Chromatogram time array is in unit '{unit}', not minutes "
-                f"('{_ACC_UNIT_MINUTE}'). This reader reports retention time in "
-                f"minutes and will not silently convert."
-            )
 
     binary = _child(elem, "binary")
     raw_text = binary.text if binary is not None else None
@@ -491,6 +526,8 @@ def _parse_chromatogram(elem: ET.Element) -> Chromatogram:
 
     time: NDArray[np.float64] | None = None
     intensity: NDArray[np.float64] | None = None
+    time_unit: tuple[str | None, str | None, str | None] = (None, None, None)
+    intensity_unit: tuple[str | None, str | None, str | None] = (None, None, None)
     binary_data_array_list = _child(elem, "binaryDataArrayList")
     if binary_data_array_list is not None:
         for binary_data_array in _iter_children(
@@ -499,8 +536,10 @@ def _parse_chromatogram(elem: ET.Element) -> Chromatogram:
             array_type, values = _decode_binary_data_array(binary_data_array)
             if array_type == "time":
                 time = values
+                time_unit = _axis_unit(binary_data_array, _ACC_TIME_ARRAY)
             elif array_type == "intensity":
                 intensity = values
+                intensity_unit = _axis_unit(binary_data_array, _ACC_INTENSITY_ARRAY)
 
     if time is None:
         raise MalformedFileError(
@@ -521,11 +560,24 @@ def _parse_chromatogram(elem: ET.Element) -> Chromatogram:
             f"{declared} but carries {time.size} time points."
         )
 
+    factor = _time_conversion_factor(time_unit[0])
+    # The source array remains untouched; even the converted buffer is read-only.
+    normalized_time = time if factor == 1.0 else time * factor
+    normalized_time.setflags(write=False)
+    assert time_unit[0] is not None  # required by the conversion lookup above
     return Chromatogram(
         id=chromatogram_id,
         kind=_classify(elem),
-        time=time,
+        time=normalized_time,
         intensity=intensity,
+        source_time=time,
+        source_time_unit_accession=time_unit[0],
+        source_time_unit_name=time_unit[1],
+        source_time_unit_cv_ref=time_unit[2],
+        time_conversion_factor=factor,
+        intensity_unit_accession=intensity_unit[0],
+        intensity_unit_name=intensity_unit[1],
+        intensity_unit_cv_ref=intensity_unit[2],
         target_mz=_selected_ion_mz(elem),
     )
 

@@ -1,31 +1,40 @@
-"""The derived, recorded per-metric tolerances (W4).
+"""Reference bounds for disagreement on the named synthetic fixture domain.
 
-A tolerance is a **claim**, and this project derives it rather than choosing it
-(``AGENTS.md`` §1.3).  Each value below is ``2 ×`` the largest relative residual
-the ground-truth suite measured across the two working sampling rates and eight
-noise seeds, after the derivation recorded in ``TOLERANCES.md`` — the noise
-residual scaled by a stated margin and rounded up, so it is honest about a noisy
-single scan.
-
-The numbers are **relative** (a fraction of the expected value), and this mapping
-is the single source of truth for them: the panel attaches the value to every
-:class:`~chromamcp.metrics.result.MetricResult` it returns, and
-``tests/test_tolerances.py`` checks it against the register in ``TOLERANCES.md``
-so the shipped number and the recorded derivation cannot drift apart.
-
-``signal_to_noise``'s reading is ``S/N = 2H/h`` with peak-to-peak noise, and its
-window is settled by ``DECISIONS.md`` §9 Q-B: 20× the half-height width, with 5×
-the permitted fallback.  Its tolerance was re-measured at the 20× window for W12
-and did not move: ``h`` is exact arithmetic over the caller's blank, so the only
-estimator in the ratio is the apex height and the S/N residual **is** the height
-residual (``TOLERANCES.md``).
+These historical bounds are not measurement uncertainty or laboratory criteria.
+No production trace is assigned an applied bound: domain applicability is
+``not-evaluated``. The %RSD floor is retained as historical, not derived.
+See ``TOLERANCES.md`` for residuals, margins and the zero-expected-value policy.
 """
 
 from __future__ import annotations
 
-__all__ = ["TOLERANCE"]
+from dataclasses import dataclass
 
-#: metric id -> derived relative tolerance.  Mirrors the register in
+__all__ = ["FIXTURE_DOMAIN_ID", "TOLERANCE", "EstimatorFixtureTolerance"]
+
+FIXTURE_DOMAIN_ID = "synthetic-w4-w12-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class EstimatorFixtureTolerance:
+    """A reference fixture bound; never an applied bound on a caller trace.
+
+    Relative error uses the independent expected value, not the measured value.
+    At zero expected value it is undefined. Nonzero expected values use the
+    relative definition without a near-zero cutoff or an absolute floor.
+    No inference of domain membership is made from a result value alone.
+    """
+
+    reference_bound: float
+    derivation_status: str
+    basis: str = "relative"
+    domain_id: str = FIXTURE_DOMAIN_ID
+    applicability: str = "not-evaluated"
+    applied_bound: None = None
+    zero_expected_policy: str = "relative-error-undefined-at-zero-no-absolute-floor"
+
+
+#: metric id -> historical relative fixture reference bound.  Mirrors the register in
 #: ``TOLERANCES.md``; the two are checked equal by ``tests/test_tolerances.py``.
 TOLERANCE: dict[str, float] = {
     "plate_number": 2.0e-2,

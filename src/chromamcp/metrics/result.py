@@ -1,23 +1,19 @@
-"""The result a panel metric returns (W3).
+"""A panel measurement and separately named synthetic-fixture evidence.
 
-Every metric returns one of these.  ``M1-BRIEF.md`` §3 requires the value to
-```M1-BRIEF.md`` §3 requires the value to
-carry its **metric id**, its **unit**, the **formula id** whose row lives in
-``SOURCES.md``, and the **tolerance** that applies to it.  A number without its
-formula id is a bug, not an incomplete feature (``AGENTS.md`` §1.1).
-
-``tolerance`` is the **derived** per-metric tolerance (W4), attached by every
-panel function from :data:`chromamcp.metrics.tolerances.TOLERANCE`.  It is a
-relative tolerance, derived from measured convergence error plus a stated margin
-and recorded in ``TOLERANCES.md`` — never a value chosen by taste, which would
-encode the estimator's bias as truth (``AGENTS.md`` §1.3).  The ``None`` default
-remains only so a caller constructing a result outside the panel is explicit
-about carrying no tolerance; the panel never emits it.
+``tolerance`` is retained as an internal constructor compatibility field for the
+panel's historical mapping. Consumers use ``estimator_fixture_tolerance``:
+its bound describes a reference experiment, not the caller's measurement.
+No applicability, measurement uncertainty or laboratory criteria is inferred.
+The raw dataclass representation is not the wire schema; the supported record
+and server serializers emit the named fixture metadata, omitting the legacy
+constructor field.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from chromamcp.metrics.tolerances import TOLERANCE, EstimatorFixtureTolerance
 
 __all__ = ["MetricResult"]
 
@@ -38,3 +34,21 @@ class MetricResult:
                 "tolerance must be a positive relative number or None, got "
                 f"{self.tolerance!r}."
             )
+
+    @property
+    def estimator_fixture_tolerance(self) -> EstimatorFixtureTolerance | None:
+        """Reference evidence with applicability explicitly not evaluated."""
+        if (
+            self.tolerance is None
+            or self.metric_id not in TOLERANCE
+            or self.tolerance != TOLERANCE[self.metric_id]
+        ):
+            return None
+        return EstimatorFixtureTolerance(
+            reference_bound=self.tolerance,
+            derivation_status=(
+                "historical-floor-not-derived"
+                if self.metric_id == "rsd_replicates"
+                else "residual-times-margin"
+            ),
+        )

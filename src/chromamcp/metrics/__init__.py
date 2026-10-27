@@ -2,13 +2,12 @@
 
 Pure metric functions, each returning a
 :class:`~chromamcp.metrics.result.MetricResult` that carries its value, unit,
-**formula id** and **derived tolerance**.  The formula ids are listed in
+**formula id** and **fixture reference evidence**.  The formula ids are listed in
 :data:`FORMULA_IDS` and checked against ``SOURCES.md`` by
 ``tests/test_sources_complete.py``; the tolerances are listed in :data:`TOLERANCE`
 and checked against ``TOLERANCES.md`` by ``tests/test_tolerances.py``.
 
-Every formula ships marked ``secondary source — primary text not consulted``
-until the USP 〈621〉 text is transcribed (``AGENTS.md`` §1.2).
+Formula source status and consulted revisions are recorded in ``SOURCES.md``.
 """
 
 from __future__ import annotations

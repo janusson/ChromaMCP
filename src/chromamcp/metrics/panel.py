@@ -19,11 +19,11 @@ Uniform conventions, named here once:
 
 - Every width is measured **above an explicit baseline**, never against zero
   (W2, ``AGENTS.md`` §7.2).
-- Every result carries the **tolerance** derived in W4 from measured convergence
-  and recorded in ``TOLERANCES.md`` (the single source is
-  :data:`~chromamcp.metrics.tolerances.TOLERANCE`, checked against the register by
-  ``tests/test_tolerances.py``); no function returns a tolerance chosen by taste
-  (``AGENTS.md`` §1.3).
+- Every panel result carries **fixture reference evidence**, recorded in
+  ``TOLERANCES.md`` and checked against
+  :data:`~chromamcp.metrics.tolerances.TOLERANCE`. Applicability to a caller's
+  measurement is not inferred. The historical %RSD floor is marked as not
+  derived; the nine trace bounds retain their measured residuals and margins.
 """
 
 from __future__ import annotations
@@ -312,19 +312,22 @@ def peak_to_valley(
     )
 
 
-def peak_height(*, apex_intensity: float, baseline_at_apex: float) -> MetricResult:
+def peak_height(
+    *, apex_intensity: float, baseline_at_apex: float, intensity_unit: str = "unknown"
+) -> MetricResult:
     """Peak height above the baseline.
 
     ``height = y_apex − baseline(t_apex)``.  This is a definition, not a cited
     equation: the height is only meaningful against the stated baseline
-    (``SOURCES.md``).
+    (``SOURCES.md``). ``intensity_unit`` is an opaque caller-supplied axis
+    label; when omitted the unit is unknown. Counts are never inferred.
     """
     _require_finite("apex_intensity", apex_intensity)
     _require_finite("baseline_at_apex", baseline_at_apex)
     return MetricResult(
         metric_id="peak_height",
         value=apex_intensity - baseline_at_apex,
-        unit="counts",
+        unit=intensity_unit,
         formula_id=FORMULA_IDS["peak_height"],
         tolerance=TOLERANCE["peak_height"],
     )
@@ -337,13 +340,15 @@ def peak_area(
     baseline: Baseline,
     left_index: int,
     right_index: int,
+    intensity_unit: str = "unknown",
 ) -> MetricResult:
     """Peak area above an explicit baseline, by the trapezoidal rule.
 
     The area of ``intensity − baseline`` over ``[left_index, right_index]``,
     integrated **trapezoidally** over the supplied grid.  The unit is the
-    intensity axis times time (``counts·min`` when intensity is detector counts
-    and time is minutes).
+    supplied intensity axis label times minutes. ``time`` must be in minutes;
+    callers with other time units must convert first. The intensity unit is an
+    opaque caller-supplied label, unknown when omitted; counts are never inferred.
 
     Conventions.  The baseline is required and explicit; an area is never
     presented as model-free (``M1-BRIEF.md`` §3).  It rejects the rectangular
@@ -364,7 +369,7 @@ def peak_area(
     return MetricResult(
         metric_id="peak_area",
         value=float(np.trapezoid(above, grid[segment])),
-        unit="counts·min",
+        unit=f"{intensity_unit}·min",
         formula_id=FORMULA_IDS["peak_area"],
         tolerance=TOLERANCE["peak_area"],
     )

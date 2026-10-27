@@ -70,7 +70,7 @@ def test_record_schema(tmp_path: Path) -> None:
         "reader",
         "timestamp_utc",
         "timestamp_note",
-        "tolerance_basis",
+        "measurement_uncertainty",
     }
     assert set(data["input_file"]) == {"path", "sha256"}
     assert set(data["reader"]) == {"name", "version"}
@@ -89,7 +89,7 @@ def test_record_schema(tmp_path: Path) -> None:
         "value",
         "unit",
         "formula_id",
-        "tolerance",
+        "estimator_fixture_tolerance",
         "verdict",
     }
     assert metric["verdict"] == "not-evaluated"
@@ -98,13 +98,17 @@ def test_record_schema(tmp_path: Path) -> None:
 def test_the_tolerance_basis_is_stated(tmp_path: Path) -> None:
     """A bare tolerance number is ambiguous; the record states its basis.
 
-    Every panel tolerance is **relative** (a fraction of the independently
-    expected value), so the record says so and ties the number to the shipped
-    mapping — a reviewer reading ``0.02`` can tell it means 2 %.
+    Fixture reference bounds use relative disagreement on their named domain.
+    Their applicability and applied bound remain separate from criteria verdict.
     """
     data = json.loads(serialise(_sample_record(_input_file(tmp_path))))
-    assert data["tolerance_basis"] == TOLERANCE_BASIS
-    assert data["metrics"][0]["tolerance"] == TOLERANCE["plate_number"]
+    metadata = data["metrics"][0]["estimator_fixture_tolerance"]
+    assert metadata["basis"] == TOLERANCE_BASIS
+    assert metadata["reference_bound"] == TOLERANCE["plate_number"]
+    assert metadata["domain_id"] == "synthetic-w4-w12-v1"
+    assert metadata["applicability"] == "not-evaluated"
+    assert metadata["applied_bound"] is None
+    assert data["measurement_uncertainty"] == "not-evaluated"
 
 
 def test_float_formatting_is_pinned(tmp_path: Path) -> None:
@@ -159,6 +163,6 @@ def test_a_verdict_outside_the_permitted_set_is_refused() -> None:
             value=1.0,
             unit="dimensionless",
             formula_id="plate_number_half_height",
-            tolerance=None,
+            estimator_fixture_tolerance=None,
             verdict="unknown",
         )

@@ -77,7 +77,7 @@ from chromamcp.metrics import (
     selectivity,
     symmetry_factor,
 )
-from chromamcp.provenance import TOLERANCE_BASIS, library_versions
+from chromamcp.provenance import library_versions
 from chromamcp.security import FilesystemPolicy, policy_from_env, resolve_path
 from chromamcp.server.store import ReferenceStore
 
@@ -85,7 +85,7 @@ __all__ = ["build_server", "main"]
 
 _INSTRUCTIONS = (
     "ChromaMCP measures chromatography — system-suitability metrics, each with "
-    "its cited formula and derived tolerance, and (later) sequence review against "
+    "its cited formula and fixture reference evidence, and (later) sequence review against "
     "a laboratory's own written criteria.  Every response carries a provenance "
     "block and every metric names the peak or pair it was measured on.  It "
     "reports measurements, never a verdict on a method."
@@ -112,6 +112,7 @@ def _provenance(
     sha256: str | None,
     *,
     operation: dict[str, object],
+    axes: list[dict[str, object]],
 ) -> dict[str, object]:
     """The deterministic half of the response: no clock, no allocation order.
 
@@ -124,8 +125,9 @@ def _provenance(
         "reader": "chromamcp.io.mzml",
         "library_versions": asdict(library_versions()),
         "criteria": None,
-        "tolerance_basis": TOLERANCE_BASIS,
+        "measurement_uncertainty": "not-evaluated",
         "operation": operation,
+        "axes": axes,
     }
 
 
@@ -151,8 +153,42 @@ def _metric(
         "value": result.value,
         "unit": result.unit,
         "formula_id": result.formula_id,
-        "tolerance": result.tolerance,
+        "estimator_fixture_tolerance": (
+            None
+            if result.estimator_fixture_tolerance is None
+            else asdict(result.estimator_fixture_tolerance)
+        ),
         "verdict": "not-evaluated",
+    }
+
+
+def _axes(chromatogram: Chromatogram) -> dict[str, object]:
+    """Compact source-axis metadata; full source values stay with the handle."""
+    return {
+        "time": {
+            "unit": "min",
+            "unit_accession": "UO:0000031",
+            "source_unit": {
+                "accession": chromatogram.source_time_unit_accession,
+                "name": chromatogram.source_time_unit_name,
+                "cv_ref": chromatogram.source_time_unit_cv_ref,
+            },
+            "conversion_factor_to_min": chromatogram.time_conversion_factor,
+            "source_range": None
+            if not chromatogram.n_points
+            else [
+                float(chromatogram.source_time[0]),
+                float(chromatogram.source_time[-1]),
+            ],
+        },
+        "intensity": {
+            "unit": chromatogram.intensity_unit,
+            "source_unit": {
+                "accession": chromatogram.intensity_unit_accession,
+                "name": chromatogram.intensity_unit_name,
+                "cv_ref": chromatogram.intensity_unit_cv_ref,
+            },
+        },
     }
 
 
@@ -162,6 +198,7 @@ def _channel(index: int, chromatogram: Chromatogram) -> dict[str, object]:
         "id": chromatogram.id,
         "kind": chromatogram.kind.value,
         "n_points": chromatogram.n_points,
+        "axes": _axes(chromatogram),
     }
 
 
@@ -192,6 +229,7 @@ def _measure(
     right: int,
     *,
     channel: int,
+    intensity_unit: str = "unknown",
 ) -> dict[str, object]:
     """Measure one caller-supplied window, against a linear baseline.
 
@@ -210,19 +248,31 @@ def _measure(
         BaselineRule.LINEAR, time, intensity, left_index=left, right_index=right
     )
     apex = find_apex(
-        time, intensity, baseline=baseline, left_index=left, right_index=right
+        time,
+        intensity,
+        baseline=baseline,
+        left_index=left,
+        right_index=right,
     )
     half = half_height_width(time, intensity, baseline=baseline, apex=apex)
     five = five_percent_width(time, intensity, baseline=baseline, apex=apex)
     area = peak_area(
-        time, intensity, baseline=baseline, left_index=left, right_index=right
+        time,
+        intensity,
+        baseline=baseline,
+        left_index=left,
+        right_index=right,
+        intensity_unit=intensity_unit,
     )
     height = peak_height(
-        apex_intensity=apex.intensity, baseline_at_apex=baseline.value(apex.time)
+        apex_intensity=apex.intensity,
+        baseline_at_apex=baseline.value(apex.time),
+        intensity_unit=intensity_unit,
     )
     return {
         "id": peak,
         "channel": channel,
+        "intensity_unit": intensity_unit,
         "window": {
             "left_index": left,
             "right_index": right,
@@ -295,6 +345,7 @@ def _per_peak(
                 peak_height(
                     apex_intensity=_as_float(apex["intensity"]),
                     baseline_at_apex=_as_float(apex["baseline"]),
+                    intensity_unit=_as_str(row["intensity_unit"]),
                 ),
                 subject=peak,
                 peaks=[peak],
@@ -407,6 +458,7 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
             "provenance": _provenance(
                 resolved,
                 snapshot.sha256,
+                axes=[_axes(item) for item in chromatograms],
                 operation={
                     "tool": "load_chromatogram",
                     "arguments": {"path": resolved},
@@ -444,6 +496,7 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
             "provenance": _provenance(
                 payload["source"],
                 payload["sha256"],
+                axes=[_axes(item) for item in chromatograms],
                 operation={
                     "tool": "summarise_chromatogram",
                     "arguments": {"reference": reference},
@@ -476,15 +529,33 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
         time, intensity = chromatogram.time, chromatogram.intensity
         try:
             rows = [
-                _measure(time, intensity, left, right, channel=channel)
+                _measure(
+                    time,
+                    intensity,
+                    left,
+                    right,
+                    channel=channel,
+                    intensity_unit=chromatogram.intensity_unit,
+                )
                 for left, right in windows
             ]
         except ChromamcpError as exc:
             raise ToolError(str(exc)) from exc
+        axes = _axes(chromatogram)
+        for row, (left, right) in zip(rows, windows, strict=True):
+            row["axes"] = axes
+            row["source_window"] = {
+                "time": [
+                    float(chromatogram.source_time[left]),
+                    float(chromatogram.source_time[right]),
+                ],
+                "unit_accession": chromatogram.source_time_unit_accession,
+            }
         peaks_ref = store.put(
             "peaks",
             {
                 "rows": rows,
+                "axes": axes,
                 "baseline_rule": BaselineRule.LINEAR.value,
                 "channel": channel,
                 "windows": windows,
@@ -509,6 +580,7 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
             "provenance": _provenance(
                 payload["source"],
                 payload["sha256"],
+                axes=[axes],
                 operation={
                     "tool": "integrate_peaks",
                     "arguments": {
@@ -526,7 +598,7 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
         name="compute_suitability",
         description=(
             "The metric panel for a peak table, each value with its formula id, "
-            "derived tolerance and the peak or pair it was measured on."
+            "fixture tolerance reference and the peak or pair it was measured on."
         ),
     )
     def compute_suitability(
@@ -596,6 +668,7 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
             "provenance": _provenance(
                 payload["source"],
                 payload["sha256"],
+                axes=[payload["axes"]],
                 operation={
                     "tool": "compute_suitability",
                     "arguments": {

@@ -5,13 +5,11 @@ noise is Gaussian, seeded, and set at 0.2 % of the peak height — a weak peak b
 system-suitability standards — so the tolerances are honest about a *noisy*
 trace rather than a noiseless idealisation (``M1-BRIEF.md`` §5.2 step 5).
 
-The :data:`TOLERANCE` values are **derived**, not chosen: each is
-``2 ×`` the largest relative residual measured over the two working rates and
-eight noise seeds, after the derivation recorded in ``TOLERANCES.md``
-(``AGENTS.md`` §1.3).  They are re-exported from the package
-(:data:`chromamcp.metrics.tolerances.TOLERANCE`) rather than restated here, so the
-value the ground-truth suite asserts against **is** the value the panel ships;
-``tests/test_tolerances.py`` checks that mapping against ``TOLERANCES.md``.
+The :data:`TOLERANCE` values are historical fixture reference bounds, not
+bounds on caller measurements. Nine use the measured noisy residual times two
+with nonuniform upward rounding; the %RSD floor is historical, not derived.
+The complete bounded replay lives in ``derive_tolerances.py``; see
+``TOLERANCES.md`` for domain, applicability and zero-expected-value policy.
 """
 
 from __future__ import annotations

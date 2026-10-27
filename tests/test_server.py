@@ -246,7 +246,7 @@ def test_every_response_carries_evidence_and_a_separate_event_block(
     loaded = _payload(wire.call("load_chromatogram", {"path": str(_mzml(tmp_path))}))
     provenance = loaded["provenance"]
     assert isinstance(provenance, dict)
-    assert provenance["tolerance_basis"] == "relative"
+    assert provenance["measurement_uncertainty"] == "not-evaluated"
     assert provenance["input_file"]["sha256"]
     assert provenance["operation"]["tool"] == "load_chromatogram"
 
@@ -283,7 +283,12 @@ def test_metric_values_carry_their_formula_and_tolerance(
     assert isinstance(metrics, list) and metrics
     for metric in metrics:
         assert metric["formula_id"]
-        assert metric["tolerance"] is not None
+        assert "tolerance" not in metric
+        reference = metric["estimator_fixture_tolerance"]
+        assert reference["reference_bound"] is not None
+        assert reference["basis"] == "relative"
+        assert reference["applicability"] == "not-evaluated"
+        assert reference["applied_bound"] is None
         assert metric["verdict"] == "not-evaluated"
     missing = {item["metric_id"] for item in panel["not_evaluated"]}
     assert "peak_to_valley" in missing
@@ -424,8 +429,8 @@ def test_a_peak_row_carries_its_window_apex_and_a_measurable_area(
     assert area["measurement_id"] == "peak_area@peak:c0:w0-249"
     assert area["metric_id"] == "peak_area"
     assert area["formula_id"] == "peak_area"
-    assert area["unit"] == "counts·min"
-    assert area["tolerance"] is not None
+    assert area["unit"] == "unknown·min"
+    assert area["estimator_fixture_tolerance"]["applied_bound"] is None
     assert area["peaks"] == ["peak:c0:w0-249"]
 
 
@@ -574,3 +579,66 @@ def test_a_missing_sample_is_refused_rather_than_emitted(
     )
     assert result["isError"] is True
     assert "non-finite" in _text(result)
+
+
+@pytest.mark.parametrize(
+    "time_unit", [("UO:0000031", "minute"), ("UO:0000010", "second")]
+)
+@pytest.mark.parametrize("intensity_unit", [("UO:0000269", "absorbance unit"), None])
+def test_axis_units_follow_the_source_through_the_panel(
+    wire: _Wire,
+    tmp_path: Path,
+    time_unit: tuple[str, str],
+    intensity_unit: tuple[str, str] | None,
+) -> None:
+    time, intensity = _trace(400)
+    factor = 60.0 if time_unit[1] == "second" else 1.0
+    source_time = [value * factor for value in time]
+    path = _write(
+        tmp_path,
+        _document(
+            [
+                _chromatogram(
+                    "tic",
+                    kind_accession=_ACC_TIC,
+                    kind_name="total ion chromatogram",
+                    time=source_time,
+                    intensity=intensity,
+                    time_unit=time_unit,
+                    intensity_unit=intensity_unit,
+                )
+            ]
+        ),
+    )
+    loaded = _payload(wire.call("load_chromatogram", {"path": str(path)}))
+    axes = loaded["channels"][0]["axes"]
+    assert loaded["provenance"]["axes"] == [axes]
+    assert axes["time"]["unit"] == "min"
+    assert axes["time"]["source_unit"]["accession"] == time_unit[0]
+    assert axes["time"]["source_range"] == [source_time[0], source_time[-1]]
+    assert axes["time"]["conversion_factor_to_min"] == pytest.approx(1 / factor)
+    expected_unit = "unknown" if intensity_unit is None else intensity_unit[1]
+    assert axes["intensity"]["unit"] == expected_unit
+    summary = _payload(
+        wire.call("summarise_chromatogram", {"reference": loaded["reference"]})
+    )
+    assert summary["channels"][0]["axes"] == axes
+    peaks = _payload(
+        wire.call(
+            "integrate_peaks",
+            {
+                "reference": loaded["reference"],
+                "channel": 0,
+                "windows": [[0, 399]],
+            },
+        )
+    )
+    assert peaks["provenance"]["axes"] == [axes]
+    row = peaks["peaks"][0]
+    assert row["source_window"]["time"] == [source_time[0], source_time[-1]]
+    assert row["axes"] == axes
+    assert row["measurements"]["height"]["unit"] == expected_unit
+    assert row["measurements"]["area"]["unit"] == expected_unit + "·min"
+    panel = _payload(wire.call("compute_suitability", {"peaks": peaks["reference"]}))
+    height = next(m for m in panel["metrics"] if m["metric_id"] == "peak_height")
+    assert height["unit"] == expected_unit

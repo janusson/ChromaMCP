@@ -111,6 +111,7 @@ def _chromatogram(
     precision: str | None = "64",
     compression: str | None = "none",
     time_unit: tuple[str, str] | None = _MINUTE,
+    intensity_unit: tuple[str, str] | None = None,
     target_mz: float | None = None,
     declared: int | None = None,
     extra_cv: str = "",
@@ -139,6 +140,7 @@ def _chromatogram(
                 intensity,
                 array_accession=_ACC_INTENSITY,
                 array_name="intensity array",
+                unit=intensity_unit,
                 precision=precision,
                 compression=compression,
             )
@@ -180,6 +182,7 @@ def _tic_document(
     precision: str | None = "64",
     compression: str | None = "none",
     time_unit: tuple[str, str] | None = _MINUTE,
+    intensity_unit: tuple[str, str] | None = None,
     declared: int | None = None,
     extra_cv: str = "",
 ) -> str:
@@ -194,6 +197,7 @@ def _tic_document(
                 precision=precision,
                 compression=compression,
                 time_unit=time_unit,
+                intensity_unit=intensity_unit,
                 declared=declared,
                 extra_cv=extra_cv,
             )
@@ -437,11 +441,67 @@ def test_missing_precision_is_refused(tmp_path: Path) -> None:
     assert "precision" in str(excinfo.value)
 
 
-def test_non_minute_time_unit_is_refused(tmp_path: Path) -> None:
-    doc = _tic_document([0.0, 1.0], [1.0, 2.0], time_unit=("UO:0000010", "second"))
-    with pytest.raises(UnsupportedFormatError) as excinfo:
+def test_seconds_are_converted_and_source_axis_is_retained(tmp_path: Path) -> None:
+    doc = _tic_document(
+        [0.0, 30.0, 60.0],
+        [1.0, 2.0, 3.0],
+        time_unit=("UO:0000010", "second"),
+    )
+    chrom = read_tic(_write(tmp_path, doc))
+    np.testing.assert_array_equal(chrom.time, [0.0, 0.5, 1.0])
+    np.testing.assert_array_equal(chrom.source_time, [0.0, 30.0, 60.0])
+    assert chrom.source_time.dtype == np.dtype("float64")
+    assert chrom.source_time_unit_accession == "UO:0000010"
+    assert chrom.source_time_unit_name == "second"
+    assert chrom.source_time_unit_cv_ref == "UO"
+    assert chrom.time_conversion_factor == 1.0 / 60.0
+    with pytest.raises(ValueError):
+        chrom.source_time[0] = 99.0
+    with pytest.raises(ValueError):
+        chrom.time[0] = 99.0
+
+
+def test_minute_axis_retains_source_values_and_identity_conversion(
+    tmp_path: Path,
+) -> None:
+    chrom = read_tic(_write(tmp_path, _tic_document([0.0, 0.5], [1.0, 2.0])))
+    np.testing.assert_array_equal(chrom.source_time, [0.0, 0.5])
+    assert chrom.source_time_unit_accession == "UO:0000031"
+    assert chrom.source_time_unit_name == "minute"
+    assert chrom.time_conversion_factor == 1.0
+
+
+@pytest.mark.parametrize(
+    "unit",
+    [None, ("", "minute"), ("UO:0000028", "millisecond"), ("UO:9999999", "unknown")],
+)
+def test_missing_or_unsupported_time_units_are_refused(
+    tmp_path: Path, unit: tuple[str, str] | None
+) -> None:
+    doc = _tic_document([0.0, 30.0, 60.0], [1.0, 2.0, 3.0], time_unit=unit)
+    with pytest.raises(UnsupportedFormatError, match=r"time.*unit"):
         read_tic(_write(tmp_path, doc))
-    assert "minutes" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "unit, expected",
+    [
+        (("UO:0000269", "absorbance unit"), "absorbance unit"),
+        (("CUSTOM:123", "instrument response"), "instrument response"),
+        (("CUSTOM:123", ""), "CUSTOM:123"),
+        (None, "unknown"),
+    ],
+)
+def test_intensity_unit_metadata_is_retained_without_conversion(
+    tmp_path: Path, unit: tuple[str, str] | None, expected: str
+) -> None:
+    doc = _tic_document([0.0, 1.0], [1.0, 2.0], intensity_unit=unit)
+    chrom = read_tic(_write(tmp_path, doc))
+    np.testing.assert_array_equal(chrom.intensity, [1.0, 2.0])
+    assert chrom.intensity_unit == expected
+    assert chrom.intensity_unit_accession == (unit[0] if unit else None)
+    assert chrom.intensity_unit_name == (unit[1] if unit else None)
+    assert chrom.intensity_unit_cv_ref == ("UO" if unit else None)
 
 
 def test_numpress_is_refused(tmp_path: Path) -> None:

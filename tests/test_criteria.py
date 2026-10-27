@@ -26,7 +26,6 @@ limits:
     between: ["main", "impurity"]
     operator: ">="
     value: 2.0
-    n: 5
     "on": [system_suitability_injection]
   - metric: rsd_replicates
     operator: "<="
@@ -49,7 +48,7 @@ def test_a_valid_file_parses() -> None:
     assert first.between == ("main", "impurity")
     assert first.operator == ">="
     assert first.value == 2.0
-    assert first.n == 5
+    assert first.n is None
     assert first.on == ("system_suitability_injection",)
 
     second = parsed.limits[1]
@@ -118,7 +117,7 @@ def test_replicate_metric_without_n_is_refused() -> None:
 
 
 def test_n_below_two_is_refused() -> None:
-    text = _VALID.replace("value: 2.0\n    n: 5", "value: 2.0\n    n: 1")
+    text = _VALID.replace("    n: 5", "    n: 1")
     with pytest.raises(CriteriaError):
         parse_criteria(text)
 
@@ -193,3 +192,43 @@ def test_the_package_exposes_no_evaluation() -> None:
     assert not any("eval" in name or "verdict" in name for name in criteria.__all__), (
         "W6 is parse-and-validate only; evaluation belongs to M3."
     )
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("criteria: SUIT-01", "criteria: SUIT-01\ncriteria: OTHER"),
+        ("  technique: LC", "  technique: LC\n  technique: GC"),
+        ("    value: 2.0", "    value: 2000\n    value: 200"),
+        (
+            '    between: ["main", "impurity"]',
+            '    between: ["a", "b"]\n    between: ["c", "d"]',
+        ),
+    ],
+)
+def test_duplicate_mapping_keys_are_refused(old: str, new: str) -> None:
+    with pytest.raises(CriteriaError, match="duplicate"):
+        parse_criteria(_VALID.replace(old, new))
+
+
+@pytest.mark.parametrize("limit", [".nan", ".inf", "-.inf", "1.0e+400", "9" * 400])
+def test_non_finite_limits_are_refused(limit: str) -> None:
+    with pytest.raises(CriteriaError, match="finite"):
+        parse_criteria(_VALID.replace("value: 2.0", f"value: {limit}"))
+
+
+def test_pairwise_names_must_be_distinct() -> None:
+    with pytest.raises(CriteriaError, match="distinct"):
+        parse_criteria(_VALID.replace('["main", "impurity"]', '["main", "main"]'))
+
+
+@pytest.mark.parametrize("count", ["5", "null"])
+def test_n_on_non_replicate_metric_is_refused(count: str) -> None:
+    with pytest.raises(CriteriaError, match="not replicate-based"):
+        parse_criteria(_VALID.replace("value: 2.0", f"value: 2.0\n    n: {count}"))
+
+
+def test_yaml_merge_cannot_override_a_limit() -> None:
+    text = _VALID.replace("    value: 2.0", "    <<: {value: 2000}\n    value: 200")
+    with pytest.raises(CriteriaError, match="duplicate"):
+        parse_criteria(text)

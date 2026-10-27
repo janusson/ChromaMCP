@@ -1,14 +1,7 @@
-"""The tolerance gate (closes the W4 plumbing).
+"""Historical fixture reference bounds and explicitly unevaluated applicability.
 
-``AGENTS.md`` §1.3: a tolerance is derived, not chosen, and it is recorded in
-``TOLERANCES.md``.  ``M1-BRIEF.md`` §3 requires every value the panel returns to
-carry the tolerance that applies to it, and §4 requires the provenance record's
-per-metric block to carry it too.  This test ties the three together:
-
-- the shipped mapping must equal the register recorded in ``TOLERANCES.md``;
-- it must cover the whole panel (every id in ``FORMULA_IDS``);
-- the panel must actually attach it, so a result never ships without its stated
-  tolerance again.
+The mapping must match TOLERANCES.md. Production results carry the reference
+bound as separate fixture evidence, with no applied bound on a caller trace.
 """
 
 from __future__ import annotations
@@ -69,3 +62,57 @@ def test_a_nonpositive_tolerance_is_refused() -> None:
             formula_id="plate_number_half_height",
             tolerance=-1.0,
         )
+
+
+def test_fixture_bound_is_reference_metadata_not_an_applied_bound() -> None:
+    result = plate_number(apex_time=1.0, half_height_width=0.1)
+    metadata = result.estimator_fixture_tolerance
+    assert metadata is not None
+    assert metadata.reference_bound == TOLERANCE["plate_number"]
+    assert metadata.basis == "relative"
+    assert metadata.domain_id == "synthetic-w4-w12-v1"
+    assert metadata.applicability == "not-evaluated"
+    assert metadata.applied_bound is None
+
+
+@pytest.mark.parametrize("value", [0.0, 1e-300])
+def test_zero_and_small_results_do_not_acquire_an_applied_relative_bound(
+    value: float,
+) -> None:
+    from chromamcp.metrics import peak_height
+
+    result = peak_height(apex_intensity=value, baseline_at_apex=0.0)
+    metadata = result.estimator_fixture_tolerance
+    assert metadata is not None
+    assert metadata.zero_expected_policy == (
+        "relative-error-undefined-at-zero-no-absolute-floor"
+    )
+    assert metadata.applicability == "not-evaluated"
+    assert metadata.applied_bound is None
+
+
+def test_the_rsd_floor_is_not_described_as_derived() -> None:
+    from chromamcp.metrics import rsd_replicates
+
+    result = rsd_replicates([1.0, 1.0, 1.0])
+    metadata = result.estimator_fixture_tolerance
+    assert metadata is not None
+    assert metadata.reference_bound == 1e-12
+    assert metadata.derivation_status == "historical-floor-not-derived"
+    assert metadata.applied_bound is None
+
+
+@pytest.mark.parametrize(
+    ("metric_id", "bound"), [("plate_number", 0.5), ("caller_metric", 0.02)]
+)
+def test_custom_constructor_bounds_do_not_inherit_the_fixture_domain(
+    metric_id: str, bound: float
+) -> None:
+    result = MetricResult(
+        metric_id=metric_id,
+        value=1.0,
+        unit="dimensionless",
+        formula_id="caller_formula",
+        tolerance=bound,
+    )
+    assert result.estimator_fixture_tolerance is None
