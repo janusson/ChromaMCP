@@ -27,6 +27,7 @@ from chromamcp.metrics import (
     signal_to_noise,
     symmetry_factor,
 )
+from chromamcp.metrics.result import MetricResult
 
 
 # --- values -----------------------------------------------------------------
@@ -222,6 +223,138 @@ def test_peak_area_rejects_an_inverted_window() -> None:
             baseline=Baseline.constant(0.0),
             left_index=2,
             right_index=0,
+        )
+
+
+@pytest.mark.parametrize(
+    ("time", "intensity"),
+    [
+        ([0.0, float("nan"), 2.0], [0.0, 1.0, 0.0]),
+        ([0.0, 1.0, 2.0], [0.0, float("inf"), 0.0]),
+    ],
+)
+def test_peak_area_rejects_non_finite_window_values(
+    time: list[float], intensity: list[float]
+) -> None:
+    with pytest.raises(MetricInputError):
+        peak_area(
+            np.asarray(time),
+            np.asarray(intensity),
+            baseline=Baseline.constant(0.0),
+            left_index=0,
+            right_index=2,
+        )
+
+
+@pytest.mark.parametrize("time", [[0.0, 2.0, 1.0], [0.0, 1.0, 1.0]])
+def test_peak_area_rejects_non_increasing_window_time(time: list[float]) -> None:
+    with pytest.raises(MetricInputError):
+        peak_area(
+            np.asarray(time),
+            np.asarray([0.0, 1.0, 1.0]),
+            baseline=Baseline.constant(0.0),
+            left_index=0,
+            right_index=2,
+        )
+
+
+def test_peak_area_rejects_overflowed_trapezoid() -> None:
+    with pytest.raises(MetricInputError):
+        peak_area(
+            np.asarray([0.0, 2.0]),
+            np.asarray([1.0e308, 1.0e308]),
+            baseline=Baseline.constant(0.0),
+            left_index=0,
+            right_index=1,
+        )
+
+
+def test_peak_area_ignores_non_finite_values_outside_the_selected_window() -> None:
+    result = peak_area(
+        np.asarray([float("nan"), 0.0, 1.0, 2.0]),
+        np.asarray([float("inf"), 0.0, 1.0, 0.0]),
+        baseline=Baseline.constant(0.0),
+        left_index=1,
+        right_index=3,
+    )
+    assert result.value == pytest.approx(1.0)
+
+
+def test_resolution_rejects_overflowed_width_sum() -> None:
+    with pytest.raises(MetricInputError):
+        resolution(
+            first_apex_time=1.0,
+            first_half_height_width=1.0e308,
+            second_apex_time=2.0,
+            second_half_height_width=1.0e308,
+        )
+
+
+def test_plate_number_rejects_overflowed_ratio() -> None:
+    with pytest.raises(MetricInputError):
+        plate_number(apex_time=1.0e308, half_height_width=1.0e-308)
+
+
+def test_symmetry_factor_rejects_overflowed_denominator() -> None:
+    with pytest.raises(MetricInputError):
+        symmetry_factor(width_at_5pct=1.0e308, front_distance_at_5pct=1.0e308)
+
+
+def test_selectivity_rejects_overflowed_ratio() -> None:
+    with pytest.raises(MetricInputError):
+        selectivity(
+            first_apex_time=1.0e-308,
+            second_apex_time=1.0e308,
+            void_time=5.0e-309,
+        )
+
+
+def test_signal_to_noise_rejects_overflowed_blank_range() -> None:
+    with pytest.raises(MetricInputError):
+        signal_to_noise(
+            signal_height=1.0,
+            blank_intensity=np.asarray([-1.0e308, 1.0e308]),
+        )
+
+
+def test_peak_height_rejects_overflowed_baseline_subtraction() -> None:
+    with pytest.raises(MetricInputError):
+        peak_height(apex_intensity=1.0e308, baseline_at_apex=-1.0e308)
+
+
+def test_peak_to_valley_rejects_overflowed_height_subtraction() -> None:
+    with pytest.raises(MetricInputError):
+        peak_to_valley(
+            first_apex_intensity=1.0e308,
+            second_apex_intensity=8.0e307,
+            valley_intensity=0.0,
+            baseline_intensity=-1.0e308,
+        )
+
+
+def test_rsd_replicates_rejects_overflowed_numerator() -> None:
+    with pytest.raises(MetricInputError):
+        rsd_replicates([1.0e308, 1.0e308, 0.0])
+
+
+def test_metric_result_rejects_a_non_finite_value() -> None:
+    with pytest.raises(MetricInputError):
+        MetricResult(
+            metric_id="peak_height",
+            value=float("nan"),
+            unit="unknown",
+            formula_id=FORMULA_IDS["peak_height"],
+        )
+
+
+def test_metric_result_rejects_a_non_finite_tolerance() -> None:
+    with pytest.raises(ValueError):
+        MetricResult(
+            metric_id="peak_height",
+            value=1.0,
+            unit="unknown",
+            formula_id=FORMULA_IDS["peak_height"],
+            tolerance=float("nan"),
         )
 
 

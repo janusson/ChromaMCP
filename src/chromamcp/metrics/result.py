@@ -11,8 +11,10 @@ constructor field.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
+from chromamcp.errors import MetricInputError
 from chromamcp.metrics.tolerances import TOLERANCE, EstimatorFixtureTolerance
 
 __all__ = ["MetricResult"]
@@ -29,7 +31,13 @@ class MetricResult:
     tolerance: float | None = None
 
     def __post_init__(self) -> None:
-        if self.tolerance is not None and self.tolerance <= 0.0:
+        if not math.isfinite(self.value):
+            raise MetricInputError(
+                f"metric result value must be finite, got {self.value!r}."
+            )
+        if self.tolerance is not None and not (
+            math.isfinite(self.tolerance) and self.tolerance > 0.0
+        ):
             raise ValueError(
                 "tolerance must be a positive relative number or None, got "
                 f"{self.tolerance!r}."

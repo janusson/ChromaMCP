@@ -85,9 +85,12 @@ def plate_number(*, apex_time: float, half_height_width: float) -> MetricResult:
     """
     _require_positive("apex_time", apex_time)
     _require_positive("half_height_width", half_height_width)
+    ratio = _require_finite_result("plate_number ratio", apex_time / half_height_width)
+    square = _require_finite_result("plate_number squared ratio", ratio * ratio)
+    value = _require_finite_result("plate_number", 5.54 * square)
     return MetricResult(
         metric_id="plate_number",
-        value=5.54 * (apex_time / half_height_width) ** 2,
+        value=value,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["plate_number"],
         tolerance=TOLERANCE["plate_number"],
@@ -122,11 +125,13 @@ def resolution(
         raise MetricInputError(
             "peaks must be given in elution order (second_apex_time > first_apex_time)."
         )
-    value = (
-        1.18
-        * (second_apex_time - first_apex_time)
-        / (first_half_height_width + second_half_height_width)
+    width_sum = _require_finite_result(
+        "resolution width sum", first_half_height_width + second_half_height_width
     )
+    time_difference = _require_finite_result(
+        "resolution time difference", second_apex_time - first_apex_time
+    )
+    value = _require_finite_result("resolution", 1.18 * time_difference / width_sum)
     return MetricResult(
         metric_id="resolution",
         value=value,
@@ -157,9 +162,13 @@ def symmetry_factor(
         raise MetricInputError(
             "front_distance_at_5pct cannot exceed the 5 %-height width."
         )
+    denominator = _require_finite_result(
+        "symmetry_factor denominator", 2.0 * front_distance_at_5pct
+    )
+    value = _require_finite_result("symmetry_factor", width_at_5pct / denominator)
     return MetricResult(
         metric_id="symmetry_factor",
-        value=width_at_5pct / (2.0 * front_distance_at_5pct),
+        value=value,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["symmetry_factor"],
         tolerance=TOLERANCE["symmetry_factor"],
@@ -183,9 +192,12 @@ def capacity_factor(*, apex_time: float, void_time: float) -> MetricResult:
             "apex_time must be greater than void_time; a peak cannot elute "
             "before the void time."
         )
+    value = _require_finite_result(
+        "capacity_factor", (apex_time - void_time) / void_time
+    )
     return MetricResult(
         metric_id="capacity_factor",
-        value=(apex_time - void_time) / void_time,
+        value=value,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["capacity_factor"],
         tolerance=TOLERANCE["capacity_factor"],
@@ -212,7 +224,13 @@ def selectivity(
         )
     if first_apex_time <= void_time:
         raise MetricInputError("first_apex_time must be greater than void_time.")
-    value = (second_apex_time - void_time) / (first_apex_time - void_time)
+    numerator = _require_finite_result(
+        "selectivity numerator", second_apex_time - void_time
+    )
+    denominator = _require_finite_result(
+        "selectivity denominator", first_apex_time - void_time
+    )
+    value = _require_finite_result("selectivity", numerator / denominator)
     return MetricResult(
         metric_id="selectivity",
         value=value,
@@ -253,15 +271,19 @@ def signal_to_noise(
         )
     if not bool(np.all(np.isfinite(blank))):
         raise MetricInputError("the blank region contains non-finite values.")
-    noise = float(np.ptp(blank))
+    with np.errstate(over="ignore", invalid="ignore"):
+        noise = float(np.ptp(blank))
+    _require_finite_result("signal_to_noise blank range", noise)
     if noise <= 0.0:
         raise MetricInputError(
             "the blank region has zero peak-to-peak noise; S/N is not defined "
             "against a noiseless blank."
         )
+    numerator = _require_finite_result("signal_to_noise numerator", 2.0 * signal_height)
+    value = _require_finite_result("signal_to_noise", numerator / noise)
     return MetricResult(
         metric_id="signal_to_noise",
-        value=2.0 * signal_height / noise,
+        value=value,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["signal_to_noise"],
         tolerance=TOLERANCE["signal_to_noise"],
@@ -293,9 +315,15 @@ def peak_to_valley(
         ("baseline_intensity", baseline_intensity),
     ):
         _require_finite(name, value)
-    first_height = first_apex_intensity - baseline_intensity
-    second_height = second_apex_intensity - baseline_intensity
-    valley_height = valley_intensity - baseline_intensity
+    first_height = _require_finite_result(
+        "peak_to_valley first height", first_apex_intensity - baseline_intensity
+    )
+    second_height = _require_finite_result(
+        "peak_to_valley second height", second_apex_intensity - baseline_intensity
+    )
+    valley_height = _require_finite_result(
+        "peak_to_valley valley height", valley_intensity - baseline_intensity
+    )
     if valley_height <= 0.0:
         raise MetricInputError(
             "the valley does not rise above the baseline; p/v is not defined."
@@ -303,9 +331,10 @@ def peak_to_valley(
     smaller = min(first_height, second_height)
     if smaller <= 0.0:
         raise MetricInputError("a peak does not rise above the baseline.")
+    value = _require_finite_result("peak_to_valley", smaller / valley_height)
     return MetricResult(
         metric_id="peak_to_valley",
-        value=smaller / valley_height,
+        value=value,
         unit=_DIMENSIONLESS,
         formula_id=FORMULA_IDS["peak_to_valley"],
         tolerance=TOLERANCE["peak_to_valley"],
@@ -324,9 +353,10 @@ def peak_height(
     """
     _require_finite("apex_intensity", apex_intensity)
     _require_finite("baseline_at_apex", baseline_at_apex)
+    value = _require_finite_result("peak_height", apex_intensity - baseline_at_apex)
     return MetricResult(
         metric_id="peak_height",
-        value=apex_intensity - baseline_at_apex,
+        value=value,
         unit=intensity_unit,
         formula_id=FORMULA_IDS["peak_height"],
         tolerance=TOLERANCE["peak_height"],
@@ -350,6 +380,10 @@ def peak_area(
     callers with other time units must convert first. The intensity unit is an
     opaque caller-supplied label, unknown when omitted; counts are never inferred.
 
+    Window convention. The inclusive selected samples must have finite time
+    and intensity values and strictly increasing times. Values outside the
+    selected window do not enter the integral.
+
     Conventions.  The baseline is required and explicit; an area is never
     presented as model-free (``M1-BRIEF.md`` §3).  It rejects the rectangular
     (mid-point) and Simpson rules, which give a different number from the same
@@ -365,10 +399,33 @@ def peak_area(
             "the window must satisfy 0 <= left_index < right_index < len(time)."
         )
     segment = slice(left_index, right_index + 1)
-    above = values[segment] - baseline.values(grid[segment])
+    window_time = grid[segment]
+    window_intensity = values[segment]
+    if not bool(np.all(np.isfinite(window_time))):
+        raise MetricInputError(
+            "time contains non-finite values in the selected window."
+        )
+    if not bool(np.all(np.isfinite(window_intensity))):
+        raise MetricInputError(
+            "intensity contains non-finite values in the selected window."
+        )
+    with np.errstate(over="ignore", invalid="ignore"):
+        time_steps = np.diff(window_time)
+    if not bool(np.all(np.isfinite(time_steps) & (time_steps > 0.0))):
+        raise MetricInputError("time must increase strictly in the selected window.")
+    with np.errstate(over="ignore", invalid="ignore"):
+        baseline_values = baseline.values(window_time)
+    if not bool(np.all(np.isfinite(baseline_values))):
+        raise MetricInputError("the baseline is non-finite in the selected window.")
+    with np.errstate(over="ignore", invalid="ignore"):
+        above = window_intensity - baseline_values
+        area = float(np.trapezoid(above, window_time))
+    if not bool(np.all(np.isfinite(above))):
+        raise MetricInputError("baseline subtraction produced non-finite values.")
+    value = _require_finite_result("peak_area", area)
     return MetricResult(
         metric_id="peak_area",
-        value=float(np.trapezoid(above, grid[segment])),
+        value=value,
         unit=f"{intensity_unit}·min",
         formula_id=FORMULA_IDS["peak_area"],
         tolerance=TOLERANCE["peak_area"],
@@ -394,10 +451,18 @@ def rsd_replicates(replicates: Sequence[float] | NDArray[np.float64]) -> MetricR
         raise MetricInputError("the sample standard deviation needs n >= 2.")
     if not bool(np.all(np.isfinite(values))):
         raise MetricInputError("replicates contain non-finite values.")
-    mean = float(np.mean(values))
+    with np.errstate(over="ignore", invalid="ignore"):
+        mean = float(np.mean(values))
+    _require_finite_result("rsd_replicates mean", mean)
     if mean == 0.0:
         raise MetricInputError("the mean is zero; %RSD is not defined.")
-    value = 100.0 * float(np.std(values, ddof=1)) / abs(mean)
+    with np.errstate(over="ignore", invalid="ignore"):
+        standard_deviation = float(np.std(values, ddof=1))
+    _require_finite_result("rsd_replicates standard deviation", standard_deviation)
+    numerator = _require_finite_result(
+        "rsd_replicates numerator", 100.0 * standard_deviation
+    )
+    value = _require_finite_result("rsd_replicates", numerator / abs(mean))
     return MetricResult(
         metric_id="rsd_replicates",
         value=value,
@@ -413,6 +478,12 @@ def rsd_replicates(replicates: Sequence[float] | NDArray[np.float64]) -> MetricR
 def _require_finite(name: str, value: float) -> None:
     if not math.isfinite(value):
         raise MetricInputError(f"{name} must be finite, got {value!r}.")
+
+
+def _require_finite_result(name: str, value: float) -> float:
+    if not math.isfinite(value):
+        raise MetricInputError(f"{name} arithmetic produced a non-finite value.")
+    return value
 
 
 def _require_positive(name: str, value: float) -> None:
