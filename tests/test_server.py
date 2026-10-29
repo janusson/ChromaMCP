@@ -217,9 +217,13 @@ def test_load_summarise_release_round_trip(wire: _Wire, tmp_path: Path) -> None:
     assert reference.startswith(_REF)
     assert loaded["n_channels"] == 1
     assert str(loaded["channels"][0]["kind"]) == "tic"
+    reader_scope = loaded["reader_scope"]
+    assert "indexedmzML wrapper and index" in reader_scope["omissions"]
+    assert "referenceableParamGroupRef terms" in reader_scope["omissions"]
 
     summary = _payload(wire.call("summarise_chromatogram", {"reference": reference}))
     assert summary["n_points_total"] == 400
+    assert summary["reader_scope"] == reader_scope
 
     released = _payload(wire.call("release_reference", {"reference": reference}))
     assert released["released"] is True

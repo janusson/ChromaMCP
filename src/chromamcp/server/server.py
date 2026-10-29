@@ -65,7 +65,11 @@ from chromamcp.geometry import (
     half_height_width,
     resolve_baseline,
 )
-from chromamcp.io.mzml import Chromatogram, read_chromatograms_with_source
+from chromamcp.io.mzml import (
+    Chromatogram,
+    read_chromatograms_with_source,
+    reader_scope,
+)
 from chromamcp.metrics import (
     MetricResult,
     capacity_factor,
@@ -450,6 +454,7 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
         )
         return {
             "reference": reference,
+            "reader_scope": reader_scope(),
             "n_channels": len(chromatograms),
             "n_bytes": snapshot.n_bytes,
             "channels": [
@@ -484,6 +489,7 @@ def build_server(*, policy: FilesystemPolicy | None = None) -> MCPServer:
         ]
         return {
             "reference": reference,
+            "reader_scope": reader_scope(),
             "n_channels": len(chromatograms),
             "n_points_total": sum(item.n_points for item in chromatograms),
             "n_bytes": payload["n_bytes"],

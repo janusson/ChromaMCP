@@ -31,6 +31,25 @@ The resulting `time` array is in minutes. The original decoded `source_time`
 array, the three source time-unit attributes, and `time_conversion_factor`
 remain available for provenance. Both time arrays are read-only float64.
 
+## Reader scope and structural counts
+
+The reader handles inline TIC, XIC, and BPC chromatogram terms and the time and
+intensity arrays described above. It checks each `chromatogramList` and
+`binaryDataArrayList` declared `count` against the number of corresponding
+child elements. The pinned mzML 1.1.0 schema defines both attributes as required
+non-negative integers. A missing, invalid, or mismatched count is refused.
+
+The reader does not resolve `referenceableParamGroupRef`; chromatogram content
+using those references is refused with a request to re-export parameters inline.
+The official [HUPO-PSI indexed mzML schema](https://github.com/HUPO-PSI/mzML/blob/master/schema/schema_1.1/mzML1.1.1_idx.xsd)
+defines `indexedmzML` as a container for mzML plus index content. This reader
+refuses that wrapper and asks for plain mzML. It does not inspect spectra,
+MS-Numpress arrays, or detector, wavelength, polarity, isolation, and transition
+semantics, and it does not apply full schema or controlled-vocabulary checks.
+The `reader_scope` field returned by `load_chromatogram` and
+`summarise_chromatogram` repeats these main inclusions and omissions with each
+response.
+
 Intensity values are not converted. All three source intensity-unit attributes
 are retained as opaque metadata, including unfamiliar accessions or names.
 The display label uses the source name, otherwise the accession, otherwise

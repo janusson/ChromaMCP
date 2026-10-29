@@ -383,6 +383,25 @@ def test_non_mzml_root_is_refused(tmp_path: Path) -> None:
     assert "mzML" in str(excinfo.value)
 
 
+def test_indexed_mzml_wrapper_is_refused_with_conversion_guidance(
+    tmp_path: Path,
+) -> None:
+    plain = _tic_document([0.0], [1.0])
+    body = plain.split("?>", maxsplit=1)[1]
+    doc = (
+        '<?xml version="1.0"?>'
+        '<indexedmzML xmlns="http://psi.hupo.org/ms/mzml">'
+        f'{body}<indexList count="1"><index name="chromatogram">'
+        '<offset idRef="tic">0</offset></index></indexList>'
+        "<indexListOffset>0</indexListOffset><fileChecksum>abc</fileChecksum>"
+        "</indexedmzML>"
+    )
+    with pytest.raises(UnsupportedFormatError) as excinfo:
+        read_chromatograms(_write(tmp_path, doc))
+    assert "indexedmzML" in str(excinfo.value)
+    assert "plain mzML" in str(excinfo.value)
+
+
 def test_malformed_xml_is_refused(tmp_path: Path) -> None:
     with pytest.raises(MalformedFileError):
         read_chromatograms(_write(tmp_path, "<mzML><run>"))
@@ -415,6 +434,86 @@ def test_declared_length_mismatch_is_refused(tmp_path: Path) -> None:
     doc = _tic_document([0.0, 1.0], [1.0, 2.0], declared=5)
     with pytest.raises(MalformedFileError):
         read_tic(_write(tmp_path, doc))
+
+
+def test_chromatogram_list_count_mismatch_is_refused(tmp_path: Path) -> None:
+    doc = _tic_document([0.0], [1.0]).replace(
+        '<chromatogramList count="1">', '<chromatogramList count="2">'
+    )
+    with pytest.raises(MalformedFileError, match="<chromatogramList> count"):
+        read_chromatograms(_write(tmp_path, doc))
+
+
+def test_non_schema_integer_list_count_is_refused(tmp_path: Path) -> None:
+    chromatograms = [
+        _chromatogram(
+            f"tic-{index}",
+            kind_accession=_ACC_TIC,
+            kind_name="total ion current chromatogram",
+            time=[0.0],
+            intensity=[1.0],
+        )
+        for index in range(10)
+    ]
+    doc = _document(chromatograms).replace(
+        '<chromatogramList count="10">', '<chromatogramList count="1_0">'
+    )
+    with pytest.raises(MalformedFileError, match="<chromatogramList> count"):
+        read_chromatograms(_write(tmp_path, doc))
+
+
+@pytest.mark.parametrize("count", [None, "-1", "one"])
+def test_invalid_chromatogram_list_count_is_refused(
+    tmp_path: Path, count: str | None
+) -> None:
+    doc = _tic_document([0.0], [1.0])
+    replacement = (
+        "<chromatogramList>" if count is None else f'<chromatogramList count="{count}">'
+    )
+    doc = doc.replace('<chromatogramList count="1">', replacement)
+    with pytest.raises(MalformedFileError, match="<chromatogramList> count"):
+        read_chromatograms(_write(tmp_path, doc))
+
+
+def test_binary_data_array_list_count_mismatch_is_refused(tmp_path: Path) -> None:
+    doc = _tic_document([0.0], [1.0]).replace(
+        '<binaryDataArrayList count="2">',
+        '<binaryDataArrayList count="3">',
+    )
+    with pytest.raises(MalformedFileError, match="<binaryDataArrayList> count"):
+        read_chromatograms(_write(tmp_path, doc))
+
+
+def test_duplicate_intensity_array_is_refused(tmp_path: Path) -> None:
+    duplicate = _bda(
+        [9.0], array_accession=_ACC_INTENSITY, array_name="intensity array"
+    )
+    doc = _tic_document([0.0], [1.0]).replace(
+        "</binaryDataArrayList>", f"{duplicate}</binaryDataArrayList>"
+    )
+    doc = doc.replace(
+        '<binaryDataArrayList count="2">', '<binaryDataArrayList count="3">'
+    )
+    with pytest.raises(MalformedFileError, match="more than one intensity array"):
+        read_chromatograms(_write(tmp_path, doc))
+
+
+def test_conflicting_array_types_are_refused(tmp_path: Path) -> None:
+    doc = _tic_document(
+        [0.0],
+        [1.0],
+        extra_cv='<cvParam cvRef="MS" accession="MS:1000515" name="intensity array" value=""/>',
+    )
+    with pytest.raises(MalformedFileError, match="conflicting array type"):
+        read_chromatograms(_write(tmp_path, doc))
+
+
+def test_unresolved_referenceable_parameter_group_is_refused(tmp_path: Path) -> None:
+    doc = _tic_document([0.0], [1.0]).replace(
+        "<binary>", '<referenceableParamGroupRef ref="arrayParams"/><binary>', 1
+    )
+    with pytest.raises(UnsupportedFormatError, match="referenceableParamGroupRef"):
+        read_chromatograms(_write(tmp_path, doc))
 
 
 def test_missing_intensity_array_is_refused(tmp_path: Path) -> None:

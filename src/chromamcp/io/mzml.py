@@ -53,6 +53,7 @@ import base64
 import binascii
 import gzip
 import hashlib
+import re
 import xml.etree.ElementTree as ET
 import zlib
 from dataclasses import dataclass
@@ -80,6 +81,7 @@ __all__ = [
     "read_source_bytes",
     "read_tic",
     "read_xic",
+    "reader_scope",
 ]
 
 # --- mzML controlled-vocabulary accessions ---------------------------------
@@ -182,6 +184,26 @@ class SourceSnapshot:
     n_bytes: int
 
 
+def reader_scope() -> dict[str, object]:
+    """Describe the recognized chromatogram subset and content it omits."""
+    return {
+        "recognized": [
+            "mzML run chromatogramList chromatogram entries",
+            "direct inline TIC, XIC, and BPC terms and selected ion m/z",
+            "time and intensity arrays using 32-bit or 64-bit floats, uncompressed or zlib",
+            "explicit second or minute time units, normalized to minutes",
+        ],
+        "omissions": [
+            "spectrumList and spectra",
+            "indexedmzML wrapper and index",
+            "referenceableParamGroupRef terms",
+            "MS-Numpress arrays",
+            "detector, wavelength, polarity, isolation, and transition semantics",
+            "full mzML schema and controlled-vocabulary checks",
+        ],
+    }
+
+
 def read_source_bytes(path: str | Path) -> tuple[SourceSnapshot, bytes]:
     """Read *path* once, returning its identity and the bytes that were read.
 
@@ -255,10 +277,9 @@ def _parse_chromatograms(
     chromatogram_list = _child(run, "chromatogramList")
     if chromatogram_list is None:
         return ()
-    return tuple(
-        _parse_chromatogram(chromatogram)
-        for chromatogram in _iter_children(chromatogram_list, "chromatogram")
-    )
+    chromatograms = _iter_children(chromatogram_list, "chromatogram")
+    _check_declared_count(chromatogram_list, "chromatogramList", len(chromatograms))
+    return tuple(_parse_chromatogram(chromatogram) for chromatogram in chromatograms)
 
 
 def read_tic(path: str | Path) -> Chromatogram:
@@ -384,6 +405,24 @@ def _to_int_or_none(raw: str | None) -> int | None:
         return None
 
 
+def _check_declared_count(elem: ET.Element, name: str, observed: int) -> None:
+    raw = elem.get("count")
+    lexical = raw.strip() if raw is not None else ""
+    if not lexical or re.fullmatch(r"[+-]?[0-9]+", lexical) is None:
+        raise MalformedFileError(
+            f"<{name}> count must be a non-negative integer; observed {raw!r}."
+        )
+    declared = int(lexical)
+    if declared < 0:
+        raise MalformedFileError(
+            f"<{name}> count must be a non-negative integer; observed {raw!r}."
+        )
+    if declared != observed:
+        raise MalformedFileError(
+            f"<{name}> count declares {declared} entries but contains {observed}."
+        )
+
+
 def _empty_array() -> NDArray[np.float64]:
     """A zero-length, read-only float64 array — a channel with no points."""
     array = np.empty(0, dtype=np.float64)
@@ -422,13 +461,20 @@ def _selected_ion_mz(elem: ET.Element) -> float | None:
 
 
 def _array_type(accessions: set[str]) -> str | None:
-    if _ACC_TIME_ARRAY in accessions:
-        return "time"
-    if _ACC_INTENSITY_ARRAY in accessions:
-        return "intensity"
-    if _ACC_MZ_ARRAY in accessions:
-        return "mz"
-    return None
+    kinds = [
+        kind
+        for accession, kind in (
+            (_ACC_TIME_ARRAY, "time"),
+            (_ACC_INTENSITY_ARRAY, "intensity"),
+            (_ACC_MZ_ARRAY, "mz"),
+        )
+        if accession in accessions
+    ]
+    if len(kinds) > 1:
+        raise MalformedFileError(
+            "A chromatogram <binaryDataArray> has conflicting array type terms."
+        )
+    return kinds[0] if kinds else None
 
 
 def _axis_unit(
@@ -524,20 +570,37 @@ def _parse_chromatogram(elem: ET.Element) -> Chromatogram:
     chromatogram_id = elem.get("id", "")
     declared = _to_int_or_none(elem.get("defaultArrayLength"))
 
+    if any(_local(child.tag) == "referenceableParamGroupRef" for child in elem.iter()):
+        raise UnsupportedFormatError(
+            f"Chromatogram '{chromatogram_id}' uses referenceableParamGroupRef, "
+            "which this reader does not resolve. Re-export with the required "
+            "parameters inline."
+        )
+
     time: NDArray[np.float64] | None = None
     intensity: NDArray[np.float64] | None = None
     time_unit: tuple[str | None, str | None, str | None] = (None, None, None)
     intensity_unit: tuple[str | None, str | None, str | None] = (None, None, None)
     binary_data_array_list = _child(elem, "binaryDataArrayList")
     if binary_data_array_list is not None:
-        for binary_data_array in _iter_children(
-            binary_data_array_list, "binaryDataArray"
-        ):
+        arrays = _iter_children(binary_data_array_list, "binaryDataArray")
+        _check_declared_count(
+            binary_data_array_list, "binaryDataArrayList", len(arrays)
+        )
+        for binary_data_array in arrays:
             array_type, values = _decode_binary_data_array(binary_data_array)
             if array_type == "time":
+                if time is not None:
+                    raise MalformedFileError(
+                        f"Chromatogram '{chromatogram_id}' has more than one time array."
+                    )
                 time = values
                 time_unit = _axis_unit(binary_data_array, _ACC_TIME_ARRAY)
             elif array_type == "intensity":
+                if intensity is not None:
+                    raise MalformedFileError(
+                        f"Chromatogram '{chromatogram_id}' has more than one intensity array."
+                    )
                 intensity = values
                 intensity_unit = _axis_unit(binary_data_array, _ACC_INTENSITY_ARRAY)
 
@@ -600,6 +663,11 @@ def _parse_root_bytes(data: bytes, *, label: str, gzipped: bool) -> ET.Element:
             f"'{label}' is not well-formed XML and cannot be read as mzML."
         ) from exc
 
+    if _local(root.tag) == "indexedmzML":
+        raise UnsupportedFormatError(
+            f"'{label}' uses the indexedmzML wrapper and index, which this reader "
+            "does not parse. Re-export as plain mzML and retry."
+        )
     if _local(root.tag) != "mzML":
         raise MalformedFileError(
             f"'{label}' is not an mzML document (root element is "
