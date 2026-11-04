@@ -1,0 +1,94 @@
+[project]
+name = "chromamcp"
+version = "0.0.1"
+description = "MCP server for chromatographic data: system-suitability metrics with cited formulas"
+# PEP 639 SPDX expression.  Without this the wheel ships LICENSE but declares no
+# licence, and AGENTS.md §6 makes the licence boundary a first-class concern.
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+# Deliberately bounded (SCHEDULE.md W0.1, AGENTS.md §5): the mzML reader stack,
+# numpy and a serialiser — and nothing else without a recorded reason.
+#
+# W1 (2026-10-11) added `numpy`: the mzML reader is standard-library only
+# (ElementTree + base64 + zlib, as in the sibling MSMCP), so numpy was the sole
+# addition; BSD-3-licensed and MIT-compatible (AGENTS.md §6).  numpy>=2.1 is the
+# first release with Python 3.13 wheels.
+#
+# W6 (2026-10-11) adds `pyyaml`: M1-BRIEF.md §6 shows the criteria file in YAML
+# syntax, so a YAML reader is required.  PyYAML is MIT-licensed and
+# MIT-compatible (AGENTS.md §6) and is used only through `yaml.safe_load`, which
+# constructs no arbitrary objects.  (Recorded alternative: TOML via the stdlib
+# `tomllib` would avoid this dependency but change the brief's shown format.)
+#
+# W8 (2026-10-11) adds `mcp`: M2 is a local MCP server over stdio, and the SDK is
+# the one sanctioned way to speak the protocol (M2-BRIEF.md §1; DECISIONS.md §6
+# records the decision).  MIT-licensed (AGENTS.md §6).  It is heavier than the
+# first two: it brings pydantic and anyio, and its transport extras bring
+# starlette/uvicorn/httpx — a server stack the project does NOT use, because the
+# transport is stdio and nothing else (AGENTS.md §3).  Only
+# `src/chromamcp/server/` imports it; `tests/test_hardening.py` asserts the
+# compute path stays free of it and that the server package is the sole importer.
+dependencies = [
+    "mcp>=2.3.0",
+    "numpy>=2.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3",
+]
+dev = [
+    "chromamcp[test]",
+    "ruff>=0.11",
+    "mypy>=1.15",
+    "basedpyright>=1.16",
+    # Type stubs for the W6 YAML reader (pyyaml ships no inline types). Dev-only,
+    # so it is not a runtime dependency and does not affect the §5 bound.
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+# PEP 639 licence metadata (License-Expression / License-File) needs core metadata
+# 2.4: hatchling 1.26.0 added 2.4 support and 1.27.0 made it the default, so the
+# [project] `license` / `license-files` fields are emitted without extra config.
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chromamcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "RUF"]
+# Scientific symbols used deliberately in the panel's docstrings — the minus sign
+# (−), prime (k′), one half (w½), alpha (α), sigma (σ), multiplication (×) and
+# the middle dot (·).  Each is the correct notation for the quantity, not a
+# homoglyph of an ASCII character, so RUF002 should not flag them.
+allowed-confusables = ["−", "′", "½", "α", "σ", "×", "·"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src", "tests"]
+mypy_path = ["src"]
+explicit_package_bases = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.basedpyright]
+# Mirrors the MSMCP configuration so `make lint` catches the same error classes the
+# editor reports.  pyright's `exclude` REPLACES its defaults rather than extending
+# them, so the defaults are restated here.
+typeCheckingMode = "standard"
+pythonVersion = "3.13"
+exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
