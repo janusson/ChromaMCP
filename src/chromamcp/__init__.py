@@ -8,7 +8,7 @@ which is the one module that imports the ``mcp`` SDK.
 
 The rules that bind this repository live in ``AGENTS.md`` at the repository root, and
 behind it ``SOURCES.md`` and ``TOLERANCES.md`` and the project documents in the
-coordination hub (``~/Hermes/Projects/ChromaMCP/`` — the milestone briefs for the
+coordination hub (``~/Agent/Projects/ChromaMCP/`` — the milestone briefs for the
 implementer rules, and ``PLAN.md`` §3 for the claims this project must never make). An
 uncited metric does not ship.
 """

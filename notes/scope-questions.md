@@ -1,7 +1,7 @@
 # Scope questions raised by the third-party "handoff report" (2026-10-11)
 
 **This is a finding, not a decision.** Per `AGENTS.md` §3, the scope table is changed only by a
-decision the maintainer records in the coordination hub (`~/Hermes/Projects/ChromaMCP/`) — not by an
+decision the maintainer records in the coordination hub (`~/Agent/Projects/ChromaMCP/`) — not by an
 implementation choice made in a branch. Each item names both readings and what a decision would have
 to settle. **All three are settled now:** the answers are in `DECISIONS.md` §4 (Q1 and Q3 recorded as
 defaults on 2026-10-11, Q2 parked as W15), so this file is the finding those decisions were made
