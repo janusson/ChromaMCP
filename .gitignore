@@ -218,4 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Repomix (AI code-pack output; regenerate with `uvx repomix`)
+repomix-output.xml
+
+# macOS
 .DS_Store

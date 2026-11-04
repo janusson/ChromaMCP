@@ -1,0 +1,53 @@
+# The gate this repository claims is the gate CI runs: the same commands `make lint` and
+# `make test` run locally, so a green build here means what it means on a developer's
+# machine.  Mirrors MSMCP's workflow.
+#
+# There is no notebook/eval step: ChromaMCP has no evaluation notebook, and the M1 exit
+# gate is the synthetic ground-truth suite that `make test` runs.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install the interpreter named in .python-version
+        run: uv python install
+
+      - name: Sync dependencies from the lockfile (dev extras)
+        run: uv sync --extra dev --locked
+
+      - name: Format check (ruff format --check)
+        run: uv run ruff format --check .
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Types (mypy)
+        run: uv run mypy
+
+      - name: Types (basedpyright)
+        run: uv run basedpyright
+
+      - name: Tests
+        run: uv run pytest
