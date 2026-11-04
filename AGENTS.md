@@ -101,8 +101,9 @@ distribution.
 
 - **M1 fixtures are synthetic only.** No vendor file, no client or former-employer data, and no
   published dataset inside the fixture suite.
-- Public datasets are used only as recorded in the coordination hub
-  (`~/Agent/Projects/ChromaMCP/DATASETS.md`), with the licence noted there.
+- Public datasets are used only as recorded in the maintainer's private coordination record
+  (`DATASETS.md`), with the licence noted there. That record is not distributed with this
+  repository.
 - Never commit data files. Fetch scripts live with the project notes; the data stays outside the tree.
 
 ## 9. Publication and handoff
