@@ -94,6 +94,14 @@ def test_signal_to_noise_value() -> None:
     assert result.value == pytest.approx(10.0)  # 2 * 10 / 2
 
 
+def test_signal_to_noise_accepts_a_positive_height() -> None:
+    blank = np.array([2.0, 4.0, 2.0])  # peak-to-peak = 2
+    result = signal_to_noise(signal_height=5.0, blank_intensity=blank)
+    assert result.value == pytest.approx(5.0)  # 2 * 5 / 2
+    assert result.formula_id == "signal_to_noise"
+    assert result.unit == "dimensionless"
+
+
 def test_peak_to_valley_value() -> None:
     result = peak_to_valley(
         first_apex_intensity=100.0,
@@ -133,6 +141,12 @@ def test_rsd_replicates_sample_standard_deviation() -> None:
 
 def test_rsd_replicates_of_identical_values_is_zero() -> None:
     assert rsd_replicates([10.0, 10.0, 10.0]).value == pytest.approx(0.0)
+
+
+def test_rsd_replicates_of_a_positive_mean_keeps_the_signed_ratio() -> None:
+    # sample sd 1.0, mean 11 -> 100 * 1 / 11, the equation's own ratio
+    result = rsd_replicates([10.0, 11.0, 12.0])
+    assert result.value == pytest.approx(100.0 / 11.0, rel=1e-12)
 
 
 def test_every_metric_carries_a_registered_formula_id() -> None:
@@ -203,6 +217,25 @@ def test_selectivity_rejects_first_peak_before_void() -> None:
 def test_signal_to_noise_rejects_a_noiseless_blank() -> None:
     with pytest.raises(MetricInputError):
         signal_to_noise(signal_height=10.0, blank_intensity=np.array([3.0, 3.0]))
+
+
+def test_signal_to_noise_rejects_a_negative_height() -> None:
+    blank = np.array([5.0, 6.0, 5.0, 7.0, 5.0])
+    with pytest.raises(MetricInputError, match="signal_height"):
+        signal_to_noise(signal_height=-1.0, blank_intensity=blank)
+
+
+def test_signal_to_noise_rejects_a_zero_height() -> None:
+    blank = np.array([5.0, 6.0, 5.0, 7.0, 5.0])
+    with pytest.raises(MetricInputError, match="signal_height"):
+        signal_to_noise(signal_height=0.0, blank_intensity=blank)
+
+
+@pytest.mark.parametrize("height", [float("nan"), float("inf"), float("-inf")])
+def test_signal_to_noise_rejects_a_non_finite_height(height: float) -> None:
+    blank = np.array([5.0, 6.0, 5.0, 7.0, 5.0])
+    with pytest.raises(MetricInputError, match="signal_height"):
+        signal_to_noise(signal_height=height, blank_intensity=blank)
 
 
 def test_peak_to_valley_rejects_a_valley_at_the_baseline() -> None:
@@ -356,6 +389,18 @@ def test_metric_result_rejects_a_non_finite_tolerance() -> None:
             formula_id=FORMULA_IDS["peak_height"],
             tolerance=float("nan"),
         )
+
+
+def test_rsd_replicates_rejects_a_zero_mean() -> None:
+    with pytest.raises(MetricInputError, match="mean must be positive"):
+        rsd_replicates([-1.0, 1.0])
+
+
+def test_rsd_replicates_rejects_a_negative_mean() -> None:
+    # Previously reported +10.0 by dividing by abs(mean); the equation has no
+    # defined relative precision for a mean that is not positive.
+    with pytest.raises(MetricInputError, match="mean must be positive"):
+        rsd_replicates([-1.0, -1.1, -0.9])
 
 
 def test_rsd_replicates_needs_at_least_two_values() -> None:

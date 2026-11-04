@@ -262,8 +262,12 @@ def signal_to_noise(
     reading (``2H/h``).  It **rejects**, and does not mix with, the RMS (``6σ``)
     form and the plain ``H/h`` form, which give different numbers from the same
     blank — mixing them is the failure the convention must prevent.
+
+    ``H`` must be **positive**: it is a peak height above the stated baseline, so
+    a zero or negative height is refused rather than reported as a non-positive
+    ``S/N``, which no chromatogram can support.
     """
-    _require_finite("signal_height", signal_height)
+    _require_positive("signal_height", signal_height)
     blank = np.asarray(blank_intensity, dtype=np.float64)
     if blank.size < 2:
         raise MetricInputError(
@@ -443,6 +447,11 @@ def rsd_replicates(replicates: Sequence[float] | NDArray[np.float64]) -> MetricR
     it (``M1-BRIEF.md`` §3).  It uses the sample (``n − 1``) denominator and
     rejects the population (``n``) denominator, which understates the spread at
     the small ``n`` system suitability uses.
+
+    The mean must be **positive**, and a non-positive mean is refused.  ``%RSD``
+    is a ratio to the mean response, so such a set has no meaningful relative
+    precision; dividing by the absolute mean would report a positive number for
+    a case the equation does not define.
     """
     values = np.asarray(replicates, dtype=np.float64)
     if values.ndim != 1:
@@ -454,15 +463,18 @@ def rsd_replicates(replicates: Sequence[float] | NDArray[np.float64]) -> MetricR
     with np.errstate(over="ignore", invalid="ignore"):
         mean = float(np.mean(values))
     _require_finite_result("rsd_replicates mean", mean)
-    if mean == 0.0:
-        raise MetricInputError("the mean is zero; %RSD is not defined.")
+    if mean <= 0.0:
+        raise MetricInputError(
+            "%RSD is a ratio to the mean response, so the replicates' mean must "
+            f"be positive; got a mean of {mean!r}."
+        )
     with np.errstate(over="ignore", invalid="ignore"):
         standard_deviation = float(np.std(values, ddof=1))
     _require_finite_result("rsd_replicates standard deviation", standard_deviation)
     numerator = _require_finite_result(
         "rsd_replicates numerator", 100.0 * standard_deviation
     )
-    value = _require_finite_result("rsd_replicates", numerator / abs(mean))
+    value = _require_finite_result("rsd_replicates", numerator / mean)
     return MetricResult(
         metric_id="rsd_replicates",
         value=value,
